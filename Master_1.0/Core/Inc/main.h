@@ -1,21 +1,21 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.h
-  * @brief          : Header for main.c file.
-  *                   This file contains the common defines of the application.
-  ******************************************************************************
+  *************************************************************************
+  * @file       : main.h
+  * @brief      : Header for main.c file.
+  *               This file contains the common defines of the application.
+  *************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
+  * <h2><center>&copy; Copyright (c) 2019 STMicroelectronics.
   * All rights reserved.</center></h2>
   *
-  * This software component is licensed by ST under Ultimate Liberty license
-  * SLA0044, the "License"; You may not use this file except in compliance with
-  * the License. You may obtain a copy of the License at:
-  *                             www.st.com/SLA0044
+  * This software component is licensed by ST under BSD 3-Clause license,
+  * the "License"; You may not use this file except in compliance with the
+  * License. You may obtain a copy of the License at:
+  *                        opensource.org/licenses/BSD-3-Clause
   *
-  ******************************************************************************
+  *************************************************************************
   */
 /* USER CODE END Header */
 
@@ -52,8 +52,6 @@ extern "C" {
 
 /* USER CODE END EM */
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -62,70 +60,55 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define CLASS_D_SHDN_Pin GPIO_PIN_0
-#define CLASS_D_SHDN_GPIO_Port GPIOC
-#define MIC_SHDN_Pin GPIO_PIN_1
-#define MIC_SHDN_GPIO_Port GPIOC
-#define DPOT_CS_Pin GPIO_PIN_2
-#define DPOT_CS_GPIO_Port GPIOC
-#define DPOT_MOSI_Pin GPIO_PIN_3
-#define DPOT_MOSI_GPIO_Port GPIOC
-#define PA_LNA_HGM_Pin GPIO_PIN_1
-#define PA_LNA_HGM_GPIO_Port GPIOA
-#define ADF7242_CS_Pin GPIO_PIN_2
-#define ADF7242_CS_GPIO_Port GPIOA
-#define ADF7242_SCK_Pin GPIO_PIN_5
-#define ADF7242_SCK_GPIO_Port GPIOA
-#define ADF7242_MISO_Pin GPIO_PIN_6
-#define ADF7242_MISO_GPIO_Port GPIOA
-#define ADF7242_MOSI_Pin GPIO_PIN_7
-#define ADF7242_MOSI_GPIO_Port GPIOA
-#define ADF7242_IRQ1_Pin GPIO_PIN_4
-#define ADF7242_IRQ1_GPIO_Port GPIOC
-#define ADF7242_IRQ1_EXTI_IRQn EXTI4_IRQn
-#define ADF7242_GP3_Pin GPIO_PIN_5
-#define ADF7242_GP3_GPIO_Port GPIOC
-#define ADF7242_GP1_Pin GPIO_PIN_0
-#define ADF7242_GP1_GPIO_Port GPIOB
-#define ADF7242_IRQ2_Pin GPIO_PIN_1
-#define ADF7242_IRQ2_GPIO_Port GPIOB
-#define ADF7242_IRQ2_EXTI_IRQn EXTI1_IRQn
-#define BOOT1_Pin GPIO_PIN_2
-#define BOOT1_GPIO_Port GPIOB
-#define DPOT_SCK_Pin GPIO_PIN_10
-#define DPOT_SCK_GPIO_Port GPIOB
-#define ADF7242_GP0_Pin GPIO_PIN_11
-#define ADF7242_GP0_GPIO_Port GPIOB
-#define BTN_UP_Pin GPIO_PIN_12
-#define BTN_UP_GPIO_Port GPIOB
-#define BTN_UP_EXTI_IRQn EXTI15_10_IRQn
-#define BTN_RIGHT_Pin GPIO_PIN_13
-#define BTN_RIGHT_GPIO_Port GPIOB
-#define BTN_RIGHT_EXTI_IRQn EXTI15_10_IRQn
-#define BTN_LEFT_Pin GPIO_PIN_14
-#define BTN_LEFT_GPIO_Port GPIOB
-#define BTN_LEFT_EXTI_IRQn EXTI15_10_IRQn
-#define BTN_DOWN_Pin GPIO_PIN_15
-#define BTN_DOWN_GPIO_Port GPIOB
-#define BTN_DOWN_EXTI_IRQn EXTI15_10_IRQn
-#define BTN_TALK_Pin GPIO_PIN_6
-#define BTN_TALK_GPIO_Port GPIOC
-#define BTN_TALK_EXTI_IRQn EXTI9_5_IRQn
-#define BTN_PWR_Pin GPIO_PIN_7
-#define BTN_PWR_GPIO_Port GPIOC
-#define BTN_PWR_EXTI_IRQn EXTI9_5_IRQn
-#define LED_RGB_BLUE_Pin GPIO_PIN_8
-#define LED_RGB_BLUE_GPIO_Port GPIOC
-#define LED_RGB_GREEN_Pin GPIO_PIN_9
-#define LED_RGB_GREEN_GPIO_Port GPIOC
-#define LED_RGB_RED_Pin GPIO_PIN_8
-#define LED_RGB_RED_GPIO_Port GPIOA
-#define LBO_Pin GPIO_PIN_10
-#define LBO_GPIO_Port GPIOA
+#define BUTTON_TALK_Pin GPIO_PIN_1
+#define BUTTON_TALK_GPIO_Port GPIOA
+#define BUTTON_TALK_EXTI_IRQn EXTI1_IRQn
+#define BUTTON_UP_Pin GPIO_PIN_3
+#define BUTTON_UP_GPIO_Port GPIOA
+#define BUTTON_UP_EXTI_IRQn EXTI3_IRQn
+#define BUTTON_OK_Pin GPIO_PIN_4
+#define BUTTON_OK_GPIO_Port GPIOA
+#define BUTTON_OK_EXTI_IRQn EXTI4_IRQn
+#define BUTTON_DOWN_Pin GPIO_PIN_6
+#define BUTTON_DOWN_GPIO_Port GPIOA
+#define BUTTON_DOWN_EXTI_IRQn EXTI9_5_IRQn
+#define POT_MOSI_Pin GPIO_PIN_7
+#define POT_MOSI_GPIO_Port GPIOA
+#define DMIC_CK_Pin GPIO_PIN_0
+#define DMIC_CK_GPIO_Port GPIOB
+#define DMIC_WS_Pin GPIO_PIN_1
+#define DMIC_WS_GPIO_Port GPIOB
+#define BUTTON_PWR_Pin GPIO_PIN_2
+#define BUTTON_PWR_GPIO_Port GPIOB
+#define BUTTON_PWR_EXTI_IRQn EXTI2_IRQn
+#define ADF7242_SCK_Pin GPIO_PIN_10
+#define ADF7242_SCK_GPIO_Port GPIOB
+#define ADF7242_CS_Pin GPIO_PIN_12
+#define ADF7242_CS_GPIO_Port GPIOB
+#define SWITCH_E_Pin GPIO_PIN_13
+#define SWITCH_E_GPIO_Port GPIOB
+#define ADF7242_MISO_Pin GPIO_PIN_14
+#define ADF7242_MISO_GPIO_Port GPIOB
+#define ADF7242_MOSI_Pin GPIO_PIN_15
+#define ADF7242_MOSI_GPIO_Port GPIOB
+#define ADF7242_IRQ1_Pin GPIO_PIN_8
+#define ADF7242_IRQ1_GPIO_Port GPIOA
+#define ADF7242_IRQ1_EXTI_IRQn EXTI9_5_IRQn
+#define ADF7242_IRQ2_Pin GPIO_PIN_9
+#define ADF7242_IRQ2_GPIO_Port GPIOA
+#define ADF7242_IRQ2_EXTI_IRQn EXTI9_5_IRQn
+#define DMIC_SD_Pin GPIO_PIN_10
+#define DMIC_SD_GPIO_Port GPIOA
+#define POT_CLK_Pin GPIO_PIN_3
+#define POT_CLK_GPIO_Port GPIOB
+#define POT_CS_Pin GPIO_PIN_4
+#define POT_CS_GPIO_Port GPIOB
 #define OLED_SCL_Pin GPIO_PIN_6
 #define OLED_SCL_GPIO_Port GPIOB
 #define OLED_SDA_Pin GPIO_PIN_7
 #define OLED_SDA_GPIO_Port GPIOB
+#define A_MIC_POWER_Pin GPIO_PIN_8
+#define A_MIC_POWER_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
