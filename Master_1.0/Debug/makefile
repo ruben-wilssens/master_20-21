@@ -58,8 +58,8 @@ all: main-build
 main-build: Master.elf secondary-outputs
 
 # Tool invocations
-Master.elf: $(OBJS) $(USER_OBJS) D:\Masterproef\Code\Final\Master_1.0\STM32F415RGTX_FLASH.ld
-	arm-none-eabi-gcc -o "Master.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\Masterproef\Code\Final\Master_1.0\STM32F415RGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Master.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Master.elf: $(OBJS) $(USER_OBJS) D:\MAP\master_20-21\Master_1.0\STM32F415RGTX_FLASH.ld
+	arm-none-eabi-gcc -o "Master.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\MAP\master_20-21\Master_1.0\STM32F415RGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Master.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

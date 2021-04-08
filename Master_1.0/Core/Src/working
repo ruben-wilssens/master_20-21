@@ -15,58 +15,11 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-struct device{
-	uint8_t ID;
-	uint32_t RSSI_counter;
-	uint16_t RSSI_Mean;
-	double RSSI_Mean_Double;
-
-	uint8_t keybits_8bit;
-	uint8_t key_8bit;
-
-	uint8_t keybytes_32bit;
-	uint8_t key_32bit[4];
-
-	uint8_t keywords_128bit;
-	uint32_t key_128bit[4];
-	uint16_t key_counter;
-};
-
-// Pointer to device struct
-struct device *ptrdev;
-
-// Struct init device1
-struct device dev1 = {
-		ID: 0x01,
-		RSSI_counter: 0x00,
-		RSSI_Mean: 0x0000,
-		RSSI_Mean_Double:  0,
-		keybits_8bit: 0x00,
-		key_8bit: 0xA1,
-		keybytes_32bit: 0x00,
-		key_32bit: {0xA0, 0xA1, 0xA2, 0xA3},
-		keywords_128bit: 0x00,
-		key_128bit: {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C},
-		key_counter: 0x00
-};
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-volatile uint32_t time_start, time_end, time_diff;
-#define TIME_MEASURE_START time_start = SysTick->VAL
-#define TIME_MEASURE_STOP time_end = SysTick->VAL; \
-		time_diff = time_start - time_end
-
-/*
-// Start point for SysTick
-HAL_SYSTICK_Config(0xFFFFFFF);
-TIME_MEASURE_START;
-...
-TIME_MEASURE_STOP;
-*/
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -105,16 +58,13 @@ UART_HandleTypeDef huart5;
 /* Default settings */
 char settings_mode = 'R';							// mode can be R (RX) or T (TX)
 
+const uint32_t settings_frequency = 245000;			// ADF frequency in [Hz/10kHz] -> 2,45 GHz
 
-const uint8_t source_ID = 0x01;
-uint8_t dest_ID = 0xFF; //0xFF = broadcast
+
 const uint8_t settings_audiosamples_length = 48;	// number of audio samples in audio packet (must be multiple of 16)
-uint8_t settings_volume = 40;
-
-
 const uint8_t packet_type_audio = 0xFF;
 const uint8_t packet_type_reply = 0x0F;
-
+const uint8_t settings_ID = 0x01;
 
 uint8_t settings_encryption = 0;					// 0 = off, 1 = on
 
@@ -122,8 +72,7 @@ uint8_t settings_encryption = 0;					// 0 = off, 1 = on
 uint8_t INT_PACKET_RECEIVED = 0;
 uint8_t INT_PACKET_SENT = 0;
 
-
-uint8_t ADF_status;//test variable
+uint8_t status; //test variable
 uint8_t HGM = 0;
 uint16_t packets_received = 0;
 uint16_t packets_received_prev = 0;
@@ -150,9 +99,6 @@ uint16_t cbuf_size = 0;
 
 
 /* Transceiver variables */
-// ADF frequency in [Hz/10kHz] -> 2,45 GHz
-const uint32_t settings_frequency = 245000;
-// Buffer starting address
 uint8_t RX_BUFFER_BASE;
 uint8_t TX_BUFFER_BASE;
 
@@ -161,11 +107,14 @@ uint8_t TX_BUFFER_BASE;
 uint8_t Rx_packet_length;
 uint8_t Rx_packet_type;
 uint8_t Rx_from_ID;
-uint8_t Rx_to_ID;
 uint8_t Rx_data_length;
 uint8_t Rx_TEST;
 uint8_t Rx_RSSI;
 
+
+uint32_t RSSI_counter;
+uint16_t RSSI_Mean;
+double RSSI_Mean_Double;
 double ALPHA = 0.1;
 
 
@@ -215,6 +164,11 @@ void writeKeyPacket(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+volatile uint32_t time_start, time_end, time_diff;
+#define TIME_MEASURE_START time_start = SysTick->VAL
+#define TIME_MEASURE_STOP time_end = SysTick->VAL; \
+		time_diff = time_start - time_end
 
 /* USER CODE END 0 */
 
@@ -275,7 +229,8 @@ int main(void)
   LED_RGB_status(0, 0, 35);
 
   startup();
-  potmeterInit(settings_volume);
+
+  potmeterInit(40);
 
   // OLED interrupt TIM9 (1s)
   HAL_TIM_Base_Start_IT(&htim9);
@@ -283,9 +238,6 @@ int main(void)
   // USB VCP variables
   int8_t buffer[25];
   int16_t RSSI_buf_16[16];
-
-  ptrdev = &dev1;
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -310,19 +262,19 @@ int main(void)
 			  while(ADF_RC_READY()==0);
 			  ADF_set_Rx_mode();
 
-			  if (!(ptrdev->RSSI_counter)){
-				  ptrdev->RSSI_Mean_Double = Rx_RSSI;
-				  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
+			  if (!RSSI_counter){
+				  RSSI_Mean_Double = Rx_RSSI;
+				  RSSI_Mean = round(RSSI_Mean_Double);
 			  }
 			  else{
-				  ptrdev->RSSI_Mean_Double = (ALPHA*Rx_RSSI) + ((1-ALPHA)*ptrdev->RSSI_Mean_Double);
-				  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
+				  RSSI_Mean_Double = (ALPHA*Rx_RSSI) + ((1-ALPHA)*RSSI_Mean_Double);
+				  RSSI_Mean = round(RSSI_Mean_Double);
 			  }
 
-			  (ptrdev->RSSI_counter)++;
+			  RSSI_counter++;
 
-			  sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) ptrdev->RSSI_Mean);
-			  CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
+			  //sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) RSSI_Mean);
+			  //CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
 
 
 			  //sprintf(RSSI_buf_16, "%d\r\n\n", (int16_t) RSSI_Mean);
@@ -338,6 +290,25 @@ int main(void)
 			  //ADF_set_Rx_mode();
 		  }
 	  }
+
+
+/*
+ 	  // Testcode for dummy transmits
+	  if(settings_mode == 'T'){
+		  HAL_Delay(1);
+		  test_transmitDummyPacket();
+	  }
+
+
+	  if (INT_PACKET_RECEIVED){
+		  INT_PACKET_RECEIVED = 0;
+
+		  if (settings_mode == 'R'){
+			  ADF_set_Rx_mode();
+			  test_receiveDummyPacket();
+		  }
+	  }
+*/
 
     /* USER CODE END WHILE */
 
@@ -1182,7 +1153,10 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		case ADF7242_IRQ2_Pin:
 			INT_PACKET_RECEIVED = 1;
 			packets_received++;
+			HAL_SYSTICK_Config(0xFFFFFFF); // Start point for SysTick
+			TIME_MEASURE_START;
 			delay_us(6);
+			TIME_MEASURE_STOP;
 			ADF_clear_Rx_flag();
 			break;
 
@@ -1373,11 +1347,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 		uint16_t RSSI;
 
-		RSSI = ptrdev->RSSI_counter - RSSI_prev;
-		RSSI_prev = ptrdev->RSSI_counter;
 
-		//sprintf(txbuf, "%u %u\r\n", (uint16_t) pckts, (uint16_t) RSSI);
-		//CDC_Transmit_FS((uint16_t *)txbuf, strlen(txbuf));
+		RSSI= RSSI_counter - RSSI_prev;
+		RSSI_prev = RSSI_counter;
+
+		sprintf(txbuf, "%u %u\r\n", (uint16_t) pckts, (uint16_t) RSSI);
+		CDC_Transmit_FS((uint16_t *)txbuf, strlen(txbuf));
 
 		//sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) RSSI_Mean);
 		//CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
@@ -1391,7 +1366,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 	// ADC running at 8 kHz (TIM5: (2625*2-1))
 	adc_value = HAL_ADC_GetValue(&hadc1);
 	circular_buf_put_overwrite(audio_buffer_handle_t, adc_value);
-	*/
+	 */
 
 	// ADC running at 16 kHz (TIM5: (2625-1)), with sample averaging to 8 kHz to improve SNR
 	if(adc_counter%2){
@@ -1516,12 +1491,11 @@ void LED_RGB_status(uint16_t red, uint16_t green, uint16_t blue){
 
 void test_transmitDummyPacket(void){
 	// Packet length (1byte), packet type (1byte), ID (1byte), RSSI byte (1byte)
-	//uint8_t packet_total_length = 6+40;
-	uint8_t packet_total_length = 6;
-	dest_ID = 0xFF;
+	//uint8_t packet_total_length = 5+40;
+	uint8_t packet_total_length = 5;
 
 	//SPI_PKT_WR, packet total length, packet type, ID
-	uint8_t header[] = {0x10, packet_total_length, 0xBB, dest_ID, source_ID};
+	uint8_t header[] = {0x10, packet_total_length, 0xBB, settings_ID};
 
 
 	//uint8_t array[20] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x20};//, 0x21222324, 0x25262728, 0x29303132};
@@ -1529,11 +1503,12 @@ void test_transmitDummyPacket(void){
 
 	// Write data to packet RAM
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi1, header, 5);
+	HAL_SPI_Transmit_IT(&hspi1, header, 4);
 	//HAL_SPI_Transmit_IT(&hspi1, array, 20);
 	//for(int i=0; i<40; i++){
 	//	HAL_SPI_Transmit_IT(&hspi1, &array[i], 1);
 	//}
+
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
 	ADF_set_Tx_mode();
@@ -1551,7 +1526,6 @@ void test_receiveDummyPacket(void){
 
 	HAL_SPI_Receive_IT(&hspi1, &Rx_packet_length, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_packet_type, 1);
-	HAL_SPI_Receive_IT(&hspi1, &Rx_to_ID, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_from_ID, 1);
 	//HAL_SPI_Receive_IT(&hspi1, array, 20);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
@@ -1566,16 +1540,15 @@ void transmitAudioPacket(void){
 	uint8_t samples[settings_audiosamples_length];
 	uint8_t encrypted[settings_audiosamples_length];
 
-	// Packet length (1byte), packet type (1byte), source_ID (1byte), RSSI byte (1byte)
-	uint8_t packet_total_length = 6 + settings_audiosamples_length;
-	dest_ID = 0xFF;
+	// Packet length (1byte), packet type (1byte), ID (1byte), RSSI byte (1byte)
+	uint8_t packet_total_length = 5 + settings_audiosamples_length;
 
 	//SPI_PKT_WR, packet total length, packet type, ID
-	uint8_t header[] = {0x10, packet_total_length, packet_type_audio, dest_ID, source_ID};
+	uint8_t header[] = {0x10, packet_total_length, packet_type_audio, settings_ID};
 
 	// Write data to packet RAM
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi1, header, 5);
+	HAL_SPI_Transmit_IT(&hspi1, header, 4);
 	uint8_t sample;
 	uint8_t cbuf_ret = 0;
 	for(uint8_t i = 0; i < settings_audiosamples_length; i++){
@@ -1608,7 +1581,6 @@ void readPacket(void){
 
 	HAL_SPI_Receive_IT(&hspi1, &Rx_packet_length, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_packet_type, 1);
-	HAL_SPI_Receive_IT(&hspi1, &Rx_to_ID, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_from_ID, 1);
 	for(uint8_t i = 0; i < settings_audiosamples_length; i++){
 		HAL_SPI_Receive_IT(&hspi1, &data[i], 1);
@@ -1637,14 +1609,14 @@ void writeKeyPacket(void){
 	//uint8_t packet_total_length = 5;
 
 	//SPI_PKT_WR, packet total length, packet type, ID
-	uint8_t header[] = {0x10, packet_total_length, packet_type_reply, dest_ID, source_ID};
+	uint8_t header[] = {0x10, packet_total_length, packet_type_reply, settings_ID};
 
 
 	uint8_t array[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16};
 
 	// Write data to packet RAM
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi1, header, 5);
+	HAL_SPI_Transmit_IT(&hspi1, header, 4);
 	//HAL_SPI_Transmit_IT(&hspi1, array, settings_audiosamples_length);
 	for(int i=0; i<settings_audiosamples_length; i++){
 		HAL_SPI_Transmit_IT(&hspi1, &array[i], 1);
