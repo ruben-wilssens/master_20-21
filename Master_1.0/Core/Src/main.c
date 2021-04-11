@@ -107,16 +107,20 @@ char settings_mode = 'R';							// mode can be R (RX) or T (TX)
 
 
 const uint8_t source_ID = 0x01;
+const uint8_t broadcast_ID = 0xFF;
 uint8_t dest_ID = 0xFF; //0xFF = broadcast
-const uint8_t settings_audiosamples_length = 48;	// number of audio samples in audio packet (must be multiple of 16)
-uint8_t settings_volume = 40;
+//uint8_t settings_audiosamples_length = 48;	// number of audio samples in audio packet (must be multiple of 16)
+#define settings_audiosamples_length 48
+uint8_t settings_volume = 15;
 
 
-const uint8_t packet_type_audio = 0xFF;
+const uint8_t packet_type_audio = 0xFE;
+const uint8_t packet_type_audio_encrypted = 0xFF;
+
 const uint8_t packet_type_reply = 0x0F;
 
 
-uint8_t settings_encryption = 0;					// 0 = off, 1 = on
+uint8_t settings_encryption = 1;					// 0 = off, 1 = on
 
 /* External interrupts */
 uint8_t INT_PACKET_RECEIVED = 0;
@@ -147,7 +151,8 @@ uint16_t adc_value_downsampled = 0;
 uint32_t adc_counter = 0;
 cbuf_handle_t audio_buffer_handle_t;
 uint16_t cbuf_size = 0;
-
+uint8_t data[settings_audiosamples_length];
+uint8_t samples[settings_audiosamples_length];
 
 /* Transceiver variables */
 // ADF frequency in [Hz/10kHz] -> 2,45 GHz
@@ -306,9 +311,21 @@ int main(void)
 		  if (settings_mode == 'R'){
 			  readPacket();
 			  writeKeyPacket();
-			  while(INT_PACKET_SENT==0);
-			  while(ADF_RC_READY()==0);
-			  ADF_set_Rx_mode();
+			  //while(INT_PACKET_SENT==0);
+			  //while(ADF_RC_READY()==0);
+			  //ADF_set_Rx_mode();
+
+			  if(Rx_packet_type == packet_type_audio_encrypted){
+				  HAL_CRYP_Decrypt(&hcryp, data, settings_audiosamples_length, samples, 50);
+				  for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+					  circular_buf_put_overwrite(audio_buffer_handle_t, samples[i]);
+				  }
+			  }
+			  else if(Rx_packet_type == packet_type_audio){
+				  for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+					  circular_buf_put_overwrite(audio_buffer_handle_t, data[i]);
+				  }
+			  }
 
 			  if (!(ptrdev->RSSI_counter)){
 				  ptrdev->RSSI_Mean_Double = Rx_RSSI;
@@ -324,10 +341,25 @@ int main(void)
 			  sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) ptrdev->RSSI_Mean);
 			  CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
 
-
 			  //sprintf(RSSI_buf_16, "%d\r\n\n", (int16_t) RSSI_Mean);
 			  //CDC_Transmit_FS((uint16_t *)RSSI_buf_16, strlen(RSSI_buf_16));
 
+		  }
+
+		  else if (settings_mode == 'T'){
+			  readPacket();
+			  if (!(ptrdev->RSSI_counter)){
+				  ptrdev->RSSI_Mean_Double = Rx_RSSI;
+				  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
+			  }
+			  else{
+				  ptrdev->RSSI_Mean_Double = (ALPHA*Rx_RSSI) + ((1-ALPHA)*ptrdev->RSSI_Mean_Double);
+				  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
+			  }
+			  (ptrdev->RSSI_counter)++;
+
+			  sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) ptrdev->RSSI_Mean);
+			  CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
 		  }
 	  }
 
@@ -1516,8 +1548,8 @@ void LED_RGB_status(uint16_t red, uint16_t green, uint16_t blue){
 
 void test_transmitDummyPacket(void){
 	// Packet length (1byte), packet type (1byte), ID (1byte), RSSI byte (1byte)
-	//uint8_t packet_total_length = 6+40;
-	uint8_t packet_total_length = 6;
+	//uint8_t packet_total_length = 5+40;
+	uint8_t packet_total_length = 5;
 	dest_ID = 0xFF;
 
 	//SPI_PKT_WR, packet total length, packet type, ID
@@ -1554,7 +1586,7 @@ void test_receiveDummyPacket(void){
 	HAL_SPI_Receive_IT(&hspi1, &Rx_to_ID, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_from_ID, 1);
 	//HAL_SPI_Receive_IT(&hspi1, array, 20);
-	HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
+	//HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_RSSI, 1);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
@@ -1563,41 +1595,55 @@ void test_receiveDummyPacket(void){
 }
 
 void transmitAudioPacket(void){
-	uint8_t samples[settings_audiosamples_length];
-	uint8_t encrypted[settings_audiosamples_length];
+	uint8_t packet_type;
+	uint8_t cbuf_ret = 0;
 
 	// Packet length (1byte), packet type (1byte), source_ID (1byte), RSSI byte (1byte)
-	uint8_t packet_total_length = 6 + settings_audiosamples_length;
-	dest_ID = 0xFF;
+	uint8_t packet_total_length = 5 + settings_audiosamples_length;
 
-	//SPI_PKT_WR, packet total length, packet type, ID
-	uint8_t header[] = {0x10, packet_total_length, packet_type_audio, dest_ID, source_ID};
+	if(settings_encryption){
+		packet_type = packet_type_audio_encrypted;
+	}
+	else{
+		packet_type = packet_type_audio;
+	}
 
-	// Write data to packet RAM
-	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi1, header, 5);
-	uint8_t sample;
-	uint8_t cbuf_ret = 0;
+	// SPI_PKT_WR, packet total length, packet type, ID
+	uint8_t header[] = {0x10, packet_total_length, packet_type, dest_ID = 0xFF, source_ID};
+
+	// Read samples from audio buffer
 	for(uint8_t i = 0; i < settings_audiosamples_length; i++){
 		cbuf_ret = circular_buf_get(audio_buffer_handle_t, &samples[i]);
 	}
 
-	HAL_CRYP_Encrypt(&hcryp, samples, settings_audiosamples_length, encrypted, 50); //blocking
+	// Encryption
+	if(settings_encryption){
+		HAL_CRYP_Encrypt(&hcryp, samples, settings_audiosamples_length, data, 50); //blocking
+	}
 
-	for(uint8_t i = 0; i < settings_audiosamples_length; i++){
-		HAL_SPI_Transmit_IT(&hspi1, &encrypted[i], 1);
+	// ---Write data to packet RAM---
+	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
+	HAL_SPI_Transmit_IT(&hspi1, header, 5);
+
+	if(settings_encryption){
+		for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+			HAL_SPI_Transmit_IT(&hspi1, &data[i], 1);
+		}
+	}
+	else{
+		for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+			HAL_SPI_Transmit_IT(&hspi1, &samples[i], 1);
+		}
 	}
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
+	// Transmit packet
 	ADF_set_Tx_mode();
 
 }
 
 void readPacket(void){
-	uint8_t data[settings_audiosamples_length];
-	uint8_t samples[settings_audiosamples_length];
-
 	// SPI_PKT_RD and SPI_NOP command
 	uint8_t SPI_commands[] = {0x30, 0xff};
 
@@ -1610,21 +1656,31 @@ void readPacket(void){
 	HAL_SPI_Receive_IT(&hspi1, &Rx_packet_type, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_to_ID, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_from_ID, 1);
-	for(uint8_t i = 0; i < settings_audiosamples_length; i++){
-		HAL_SPI_Receive_IT(&hspi1, &data[i], 1);
-	}
-	HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
-	HAL_SPI_Receive_IT(&hspi1, &Rx_RSSI, 1);
-	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
+	if(Rx_to_ID == broadcast_ID){
+		if(Rx_packet_type == packet_type_audio_encrypted || Rx_packet_type == packet_type_audio){
+			for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+				HAL_SPI_Receive_IT(&hspi1, &data[i], 1);
+			}
 
-	if(Rx_packet_type == packet_type_audio){
-		HAL_CRYP_Decrypt(&hcryp, data, settings_audiosamples_length, samples, 50);
-
-		for(uint8_t i = 0; i < settings_audiosamples_length; i++){
-			circular_buf_put_overwrite(audio_buffer_handle_t, samples[i]);
+			//HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
+			HAL_SPI_Receive_IT(&hspi1, &Rx_RSSI, 1);
+			HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 		}
 	}
-
+	else if (Rx_to_ID == source_ID){
+		if(Rx_packet_type == packet_type_reply){
+			for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+				HAL_SPI_Receive_IT(&hspi1, &data[i], 1);
+			}
+		}
+		//HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
+		HAL_SPI_Receive_IT(&hspi1, &Rx_RSSI, 1);
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
+	}
+	else{
+		// Ignore packet
+	}
+	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
 	// Wait for SPI to finish
 	//while (ADF_SPI_READY() == 0);
@@ -1634,22 +1690,18 @@ void readPacket(void){
 void writeKeyPacket(void){
 	// Packet length (1byte), packet type (1byte), ID (1byte), RSSI byte (1byte)
 	uint8_t packet_total_length = 5+settings_audiosamples_length;
-	//uint8_t packet_total_length = 5;
 
 	//SPI_PKT_WR, packet total length, packet type, ID
 	uint8_t header[] = {0x10, packet_total_length, packet_type_reply, dest_ID, source_ID};
-
 
 	uint8_t array[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16};
 
 	// Write data to packet RAM
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit_IT(&hspi1, header, 5);
-	//HAL_SPI_Transmit_IT(&hspi1, array, settings_audiosamples_length);
 	for(int i=0; i<settings_audiosamples_length; i++){
 		HAL_SPI_Transmit_IT(&hspi1, &array[i], 1);
 	}
-
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 	ADF_set_Tx_mode();
 }
