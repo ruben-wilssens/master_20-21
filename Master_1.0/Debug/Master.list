@@ -37,13 +37,13 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY, DEBUGGING
  16 .debug_macro  00028d8a  00000000  00000000  00066c88  2**0
                   CONTENTS, READONLY, DEBUGGING
- 17 .debug_line   0001f476  00000000  00000000  0008fa12  2**0
+ 17 .debug_line   0001fc1c  00000000  00000000  0008fa12  2**0
                   CONTENTS, READONLY, DEBUGGING
- 18 .debug_str    000d9822  00000000  00000000  000aee88  2**0
+ 18 .debug_str    000d9811  00000000  00000000  000af62e  2**0
                   CONTENTS, READONLY, DEBUGGING
- 19 .comment      0000007b  00000000  00000000  001886aa  2**0
+ 19 .comment      0000007b  00000000  00000000  00188e3f  2**0
                   CONTENTS, READONLY
- 20 .debug_frame  00009848  00000000  00000000  00188728  2**2
+ 20 .debug_frame  00009848  00000000  00000000  00188ebc  2**2
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -9091,50 +9091,78 @@ void OTG_FS_IRQHandler(void)
  8003d7c:	20001fe0 	.word	0x20001fe0
 
 08003d80 <_getpid>:
+void initialise_monitor_handles()
+{
+}
+
+int _getpid(void)
+{
  8003d80:	b480      	push	{r7}
  8003d82:	af00      	add	r7, sp, #0
+	return 1;
  8003d84:	2301      	movs	r3, #1
+}
  8003d86:	4618      	mov	r0, r3
  8003d88:	46bd      	mov	sp, r7
  8003d8a:	f85d 7b04 	ldr.w	r7, [sp], #4
  8003d8e:	4770      	bx	lr
 
 08003d90 <_kill>:
+
+int _kill(int pid, int sig)
+{
  8003d90:	b580      	push	{r7, lr}
  8003d92:	b082      	sub	sp, #8
  8003d94:	af00      	add	r7, sp, #0
  8003d96:	6078      	str	r0, [r7, #4]
  8003d98:	6039      	str	r1, [r7, #0]
+	errno = EINVAL;
  8003d9a:	f00d f8e5 	bl	8010f68 <__errno>
  8003d9e:	4602      	mov	r2, r0
  8003da0:	2316      	movs	r3, #22
  8003da2:	6013      	str	r3, [r2, #0]
+	return -1;
  8003da4:	f04f 33ff 	mov.w	r3, #4294967295
+}
  8003da8:	4618      	mov	r0, r3
  8003daa:	3708      	adds	r7, #8
  8003dac:	46bd      	mov	sp, r7
  8003dae:	bd80      	pop	{r7, pc}
 
 08003db0 <_exit>:
+
+void _exit (int status)
+{
  8003db0:	b580      	push	{r7, lr}
  8003db2:	b082      	sub	sp, #8
  8003db4:	af00      	add	r7, sp, #0
  8003db6:	6078      	str	r0, [r7, #4]
+	_kill(status, -1);
  8003db8:	f04f 31ff 	mov.w	r1, #4294967295
  8003dbc:	6878      	ldr	r0, [r7, #4]
  8003dbe:	f7ff ffe7 	bl	8003d90 <_kill>
+	while (1) {}		/* Make sure we hang here */
  8003dc2:	e7fe      	b.n	8003dc2 <_exit+0x12>
 
 08003dc4 <_read>:
+}
+
+__attribute__((weak)) int _read(int file, char *ptr, int len)
+{
  8003dc4:	b580      	push	{r7, lr}
  8003dc6:	b086      	sub	sp, #24
  8003dc8:	af00      	add	r7, sp, #0
  8003dca:	60f8      	str	r0, [r7, #12]
  8003dcc:	60b9      	str	r1, [r7, #8]
  8003dce:	607a      	str	r2, [r7, #4]
+	int DataIdx;
+
+	for (DataIdx = 0; DataIdx < len; DataIdx++)
  8003dd0:	2300      	movs	r3, #0
  8003dd2:	617b      	str	r3, [r7, #20]
  8003dd4:	e00a      	b.n	8003dec <_read+0x28>
+	{
+		*ptr++ = __io_getchar();
  8003dd6:	f3af 8000 	nop.w
  8003dda:	4601      	mov	r1, r0
  8003ddc:	68bb      	ldr	r3, [r7, #8]
@@ -9142,6 +9170,7 @@ void OTG_FS_IRQHandler(void)
  8003de0:	60ba      	str	r2, [r7, #8]
  8003de2:	b2ca      	uxtb	r2, r1
  8003de4:	701a      	strb	r2, [r3, #0]
+	for (DataIdx = 0; DataIdx < len; DataIdx++)
  8003de6:	697b      	ldr	r3, [r7, #20]
  8003de8:	3301      	adds	r3, #1
  8003dea:	617b      	str	r3, [r7, #20]
@@ -9149,28 +9178,41 @@ void OTG_FS_IRQHandler(void)
  8003dee:	687b      	ldr	r3, [r7, #4]
  8003df0:	429a      	cmp	r2, r3
  8003df2:	dbf0      	blt.n	8003dd6 <_read+0x12>
+	}
+
+return len;
  8003df4:	687b      	ldr	r3, [r7, #4]
+}
  8003df6:	4618      	mov	r0, r3
  8003df8:	3718      	adds	r7, #24
  8003dfa:	46bd      	mov	sp, r7
  8003dfc:	bd80      	pop	{r7, pc}
 
 08003dfe <_write>:
+
+__attribute__((weak)) int _write(int file, char *ptr, int len)
+{
  8003dfe:	b580      	push	{r7, lr}
  8003e00:	b086      	sub	sp, #24
  8003e02:	af00      	add	r7, sp, #0
  8003e04:	60f8      	str	r0, [r7, #12]
  8003e06:	60b9      	str	r1, [r7, #8]
  8003e08:	607a      	str	r2, [r7, #4]
+	int DataIdx;
+
+	for (DataIdx = 0; DataIdx < len; DataIdx++)
  8003e0a:	2300      	movs	r3, #0
  8003e0c:	617b      	str	r3, [r7, #20]
  8003e0e:	e009      	b.n	8003e24 <_write+0x26>
+	{
+		__io_putchar(*ptr++);
  8003e10:	68bb      	ldr	r3, [r7, #8]
  8003e12:	1c5a      	adds	r2, r3, #1
  8003e14:	60ba      	str	r2, [r7, #8]
  8003e16:	781b      	ldrb	r3, [r3, #0]
  8003e18:	4618      	mov	r0, r3
  8003e1a:	f3af 8000 	nop.w
+	for (DataIdx = 0; DataIdx < len; DataIdx++)
  8003e1e:	697b      	ldr	r3, [r7, #20]
  8003e20:	3301      	adds	r3, #1
  8003e22:	617b      	str	r3, [r7, #20]
@@ -9178,18 +9220,26 @@ void OTG_FS_IRQHandler(void)
  8003e26:	687b      	ldr	r3, [r7, #4]
  8003e28:	429a      	cmp	r2, r3
  8003e2a:	dbf1      	blt.n	8003e10 <_write+0x12>
+	}
+	return len;
  8003e2c:	687b      	ldr	r3, [r7, #4]
+}
  8003e2e:	4618      	mov	r0, r3
  8003e30:	3718      	adds	r7, #24
  8003e32:	46bd      	mov	sp, r7
  8003e34:	bd80      	pop	{r7, pc}
 
 08003e36 <_close>:
+
+int _close(int file)
+{
  8003e36:	b480      	push	{r7}
  8003e38:	b083      	sub	sp, #12
  8003e3a:	af00      	add	r7, sp, #0
  8003e3c:	6078      	str	r0, [r7, #4]
+	return -1;
  8003e3e:	f04f 33ff 	mov.w	r3, #4294967295
+}
  8003e42:	4618      	mov	r0, r3
  8003e44:	370c      	adds	r7, #12
  8003e46:	46bd      	mov	sp, r7
@@ -9197,15 +9247,22 @@ void OTG_FS_IRQHandler(void)
  8003e4c:	4770      	bx	lr
 
 08003e4e <_fstat>:
+
+
+int _fstat(int file, struct stat *st)
+{
  8003e4e:	b480      	push	{r7}
  8003e50:	b083      	sub	sp, #12
  8003e52:	af00      	add	r7, sp, #0
  8003e54:	6078      	str	r0, [r7, #4]
  8003e56:	6039      	str	r1, [r7, #0]
+	st->st_mode = S_IFCHR;
  8003e58:	683b      	ldr	r3, [r7, #0]
  8003e5a:	f44f 5200 	mov.w	r2, #8192	; 0x2000
  8003e5e:	605a      	str	r2, [r3, #4]
+	return 0;
  8003e60:	2300      	movs	r3, #0
+}
  8003e62:	4618      	mov	r0, r3
  8003e64:	370c      	adds	r7, #12
  8003e66:	46bd      	mov	sp, r7
@@ -9213,11 +9270,16 @@ void OTG_FS_IRQHandler(void)
  8003e6c:	4770      	bx	lr
 
 08003e6e <_isatty>:
+
+int _isatty(int file)
+{
  8003e6e:	b480      	push	{r7}
  8003e70:	b083      	sub	sp, #12
  8003e72:	af00      	add	r7, sp, #0
  8003e74:	6078      	str	r0, [r7, #4]
+	return 1;
  8003e76:	2301      	movs	r3, #1
+}
  8003e78:	4618      	mov	r0, r3
  8003e7a:	370c      	adds	r7, #12
  8003e7c:	46bd      	mov	sp, r7
@@ -9225,13 +9287,18 @@ void OTG_FS_IRQHandler(void)
  8003e82:	4770      	bx	lr
 
 08003e84 <_lseek>:
+
+int _lseek(int file, int ptr, int dir)
+{
  8003e84:	b480      	push	{r7}
  8003e86:	b085      	sub	sp, #20
  8003e88:	af00      	add	r7, sp, #0
  8003e8a:	60f8      	str	r0, [r7, #12]
  8003e8c:	60b9      	str	r1, [r7, #8]
  8003e8e:	607a      	str	r2, [r7, #4]
+	return 0;
  8003e90:	2300      	movs	r3, #0
+}
  8003e92:	4618      	mov	r0, r3
  8003e94:	3714      	adds	r7, #20
  8003e96:	46bd      	mov	sp, r7
@@ -9240,23 +9307,44 @@ void OTG_FS_IRQHandler(void)
 	...
 
 08003ea0 <_sbrk>:
+ *
+ * @param incr Memory size
+ * @return Pointer to allocated memory
+ */
+void *_sbrk(ptrdiff_t incr)
+{
  8003ea0:	b580      	push	{r7, lr}
  8003ea2:	b086      	sub	sp, #24
  8003ea4:	af00      	add	r7, sp, #0
  8003ea6:	6078      	str	r0, [r7, #4]
+  extern uint8_t _end; /* Symbol defined in the linker script */
+  extern uint8_t _estack; /* Symbol defined in the linker script */
+  extern uint32_t _Min_Stack_Size; /* Symbol defined in the linker script */
+  const uint32_t stack_limit = (uint32_t)&_estack - (uint32_t)&_Min_Stack_Size;
  8003ea8:	4a14      	ldr	r2, [pc, #80]	; (8003efc <_sbrk+0x5c>)
  8003eaa:	4b15      	ldr	r3, [pc, #84]	; (8003f00 <_sbrk+0x60>)
  8003eac:	1ad3      	subs	r3, r2, r3
  8003eae:	617b      	str	r3, [r7, #20]
+  const uint8_t *max_heap = (uint8_t *)stack_limit;
  8003eb0:	697b      	ldr	r3, [r7, #20]
  8003eb2:	613b      	str	r3, [r7, #16]
+  uint8_t *prev_heap_end;
+
+  /* Initialize heap end at first call */
+  if (NULL == __sbrk_heap_end)
  8003eb4:	4b13      	ldr	r3, [pc, #76]	; (8003f04 <_sbrk+0x64>)
  8003eb6:	681b      	ldr	r3, [r3, #0]
  8003eb8:	2b00      	cmp	r3, #0
  8003eba:	d102      	bne.n	8003ec2 <_sbrk+0x22>
+  {
+    __sbrk_heap_end = &_end;
  8003ebc:	4b11      	ldr	r3, [pc, #68]	; (8003f04 <_sbrk+0x64>)
  8003ebe:	4a12      	ldr	r2, [pc, #72]	; (8003f08 <_sbrk+0x68>)
  8003ec0:	601a      	str	r2, [r3, #0]
+  }
+
+  /* Protect heap from growing into the reserved MSP stack */
+  if (__sbrk_heap_end + incr > max_heap)
  8003ec2:	4b10      	ldr	r3, [pc, #64]	; (8003f04 <_sbrk+0x64>)
  8003ec4:	681a      	ldr	r2, [r3, #0]
  8003ec6:	687b      	ldr	r3, [r7, #4]
@@ -9264,22 +9352,32 @@ void OTG_FS_IRQHandler(void)
  8003eca:	693a      	ldr	r2, [r7, #16]
  8003ecc:	429a      	cmp	r2, r3
  8003ece:	d207      	bcs.n	8003ee0 <_sbrk+0x40>
+  {
+    errno = ENOMEM;
  8003ed0:	f00d f84a 	bl	8010f68 <__errno>
  8003ed4:	4602      	mov	r2, r0
  8003ed6:	230c      	movs	r3, #12
  8003ed8:	6013      	str	r3, [r2, #0]
+    return (void *)-1;
  8003eda:	f04f 33ff 	mov.w	r3, #4294967295
  8003ede:	e009      	b.n	8003ef4 <_sbrk+0x54>
+  }
+
+  prev_heap_end = __sbrk_heap_end;
  8003ee0:	4b08      	ldr	r3, [pc, #32]	; (8003f04 <_sbrk+0x64>)
  8003ee2:	681b      	ldr	r3, [r3, #0]
  8003ee4:	60fb      	str	r3, [r7, #12]
+  __sbrk_heap_end += incr;
  8003ee6:	4b07      	ldr	r3, [pc, #28]	; (8003f04 <_sbrk+0x64>)
  8003ee8:	681a      	ldr	r2, [r3, #0]
  8003eea:	687b      	ldr	r3, [r7, #4]
  8003eec:	4413      	add	r3, r2
  8003eee:	4a05      	ldr	r2, [pc, #20]	; (8003f04 <_sbrk+0x64>)
  8003ef0:	6013      	str	r3, [r2, #0]
+
+  return (void *)prev_heap_end;
  8003ef2:	68fb      	ldr	r3, [r7, #12]
+}
  8003ef4:	4618      	mov	r0, r3
  8003ef6:	3718      	adds	r7, #24
  8003ef8:	46bd      	mov	sp, r7
