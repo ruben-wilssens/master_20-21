@@ -15,7 +15,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-struct device{
+typedef struct{
 	uint8_t ID;
 	uint32_t RSSI_counter;
 	uint16_t RSSI_Mean;
@@ -33,13 +33,13 @@ struct device{
 	uint16_t key_counter;
 
 	uint8_t key_chosen_wait_timer;
-};
+} device;
 
 // Pointer to device struct
-struct device *ptrdev;
+device *ptrdev;
 
 // Struct init device1
-struct device dev1 = {
+device dev1 = {
 		ID: 0x01,
 		RSSI_counter: 0x00,
 		RSSI_Mean: 0x0000,
@@ -119,16 +119,25 @@ uint8_t dest_ID = 0xFF; //0xFF = broadcast
 uint8_t settings_volume = 15;
 uint8_t settings_threshold = 3;
 
+
 const uint8_t packet_type_audio = 0xFE;
 const uint8_t packet_type_audio_encrypted = 0xFF;
 
+const uint8_t packet_type_keybit_chosen = 0xAA;
+const uint8_t packet_type_keybit_chosen_Hamming = 0xAB; //Hamming
+const uint8_t packet_type_keybit_chosen_CRC = 0xAC; //Hamming+CRC
+
+const uint8_t packet_type_keybit_CRC_ok = 0xA0;
+const uint8_t packet_type_keybit_CRC_bad = 0xB0;
+
 const uint8_t packet_type_reply = 0x0F;
+
 
 
 uint8_t settings_encryption = 1;					// 0 = off, 1 = on
 
 
-uint8_t encryption_byte = 0;
+uint8_t encryption_byte = 0; //0 = niks, 1 = keybit, 2 = CRC
 
 
 /* External interrupts */
@@ -319,40 +328,112 @@ int main(void)
 
 		  if (settings_mode == 'R'){
 			  readPacket();
-			  writeKeyPacket();
-			  //while(INT_PACKET_SENT==0);
-			  //while(ADF_RC_READY()==0);
-			  //ADF_set_Rx_mode();
-
-			  if(Rx_packet_type == packet_type_audio_encrypted){
-				  HAL_CRYP_Decrypt(&hcryp, data, settings_audiosamples_length, samples, 50);
-				  for(uint8_t i = 0; i < settings_audiosamples_length; i++){
-					  circular_buf_put_overwrite(audio_buffer_handle_t, samples[i]);
+			  if((Rx_to_ID == source_ID) || (Rx_to_ID == broadcast_ID)){
+				  //writeKeyPacket();
+				  encryption_byte = 0;
+				  if (!(ptrdev->RSSI_counter)){
+					  ptrdev->RSSI_Mean_Double = Rx_RSSI;
+					  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
 				  }
-			  }
-			  else if(Rx_packet_type == packet_type_audio){
-				  for(uint8_t i = 0; i < settings_audiosamples_length; i++){
-					  circular_buf_put_overwrite(audio_buffer_handle_t, data[i]);
+				  else{
+					  ptrdev->RSSI_Mean_Double = (ALPHA*Rx_RSSI) + ((1-ALPHA)*ptrdev->RSSI_Mean_Double);
+					  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
 				  }
+				  (ptrdev->RSSI_counter)++;
+
+
+				  if(Rx_packet_type == packet_type_keybit_chosen){
+					  // Point to correct device with Rx_from_ID
+
+					  // Generate new keybit
+					  if(Rx_RSSI <= ptrdev->RSSI_Mean){
+						  if(ptrdev->keybits_8bit < 8){
+							  (ptrdev->key_8bit) = ((ptrdev->key_8bit)<<1) | 0;
+							  (ptrdev->keybits_8bit)++;
+						  }
+					  }
+					  else if(Rx_RSSI > ptrdev->RSSI_Mean){
+						  if(ptrdev->keybits_8bit < 8){
+							  (ptrdev->key_8bit) = ((ptrdev->key_8bit)<<1) | 1;
+							  (ptrdev->keybits_8bit)++;
+						  }
+					  }
+
+					  encryption_byte = packet_type_reply;
+				  }
+
+				  else if(Rx_packet_type == packet_type_keybit_chosen_Hamming){
+					  // Point to correct device with Rx_from_ID
+
+					  // Generate last keybit of 8-bit key
+					  if(Rx_RSSI <= ptrdev->RSSI_Mean){
+						  (ptrdev->key_8bit) = ((ptrdev->key_8bit)<<1) | 0;
+					  }
+					  else if(Rx_RSSI > ptrdev->RSSI_Mean){
+						  (ptrdev->key_8bit) = ((ptrdev->key_8bit)<<1) | 1;
+					  }
+
+					  // Do a Hamming correction with Rx_Hamming_code
+
+					  // Shift 8-bit key in 32-bit key + update parameters
+					  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
+					  ptrdev->key_8bit = 0;
+					  ptrdev->keybits_8bit = 0;
+					  (ptrdev->keybytes_32bit)++;
+
+					  encryption_byte = packet_type_reply;
+
+					  // Transmit over USB
+					  uint8_t TxBuf[32];
+					  sprintf(TxBuf, "%lu\r\n", (unsigned long) (ptrdev->key_32bit));
+					  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+				  }
+
+				  else if(Rx_packet_type == packet_type_keybit_chosen_CRC){
+					  // Point to correct device with Rx_from_ID
+
+					  // Generate last keybit of 8-bit key
+					  if(Rx_RSSI <= ptrdev->RSSI_Mean){
+						  (ptrdev->key_8bit) = ((ptrdev->key_8bit)<<1) | 0;
+					  }
+					  else if(Rx_RSSI > ptrdev->RSSI_Mean){
+						  (ptrdev->key_8bit) = ((ptrdev->key_8bit)<<1) | 1;
+					  }
+
+					  // Do a Hamming correction with Rx_Hamming_code
+
+					  // Shift 8-bit key in 32-bit key + update parameters
+					  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
+					  ptrdev->key_8bit = 0;
+					  ptrdev->keybits_8bit = 0;
+					  (ptrdev->keybytes_32bit)++;
+
+					  // Generate CRC of Rx-key + do CRC check with Tx CRC
+
+					  // If CRC does match, set packet_type = CRC_OK & add 32bit key to 128bit key; if CRC doesn't match, set packet_type = CRC_BAD
+					  encryption_byte = packet_type_keybit_CRC_ok;
+				  }
+
+				  else if(Rx_packet_type == packet_type_audio_encrypted){
+					  HAL_CRYP_Decrypt(&hcryp, data, settings_audiosamples_length, samples, 50);
+					  for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+						  circular_buf_put_overwrite(audio_buffer_handle_t, samples[i]);
+					  }
+					  encryption_byte = packet_type_reply;
+				  }
+				  else if(Rx_packet_type == packet_type_audio){
+					  for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+						  circular_buf_put_overwrite(audio_buffer_handle_t, data[i]);
+					  }
+					  encryption_byte = packet_type_reply; //hoeft eigenlijk geen packetten te sturen als reply
+				  }
+
+				  writeKeybitPacket(ptrdev, encryption_byte);
+
+				  // Werkt
+				  //sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) ptrdev->RSSI_Mean);
+				  //CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
 			  }
-
-			  if (!(ptrdev->RSSI_counter)){
-				  ptrdev->RSSI_Mean_Double = Rx_RSSI;
-				  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
-			  }
-			  else{
-				  ptrdev->RSSI_Mean_Double = (ALPHA*Rx_RSSI) + ((1-ALPHA)*ptrdev->RSSI_Mean_Double);
-				  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
-			  }
-
-			  (ptrdev->RSSI_counter)++;
-
-			  sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) ptrdev->RSSI_Mean);
-			  CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
-
-			  //sprintf(RSSI_buf_16, "%d\r\n\n", (int16_t) RSSI_Mean);
-			  //CDC_Transmit_FS((uint16_t *)RSSI_buf_16, strlen(RSSI_buf_16));
-
 		  }
 
 		  else if (settings_mode == 'T'){
@@ -368,70 +449,79 @@ int main(void)
 			  (ptrdev->RSSI_counter)++;
 
 
-			  // Key generation algorithm TX
-			  if(ptrdev->keywords_128bit == 4){
-				  (ptrdev->key_counter)++;
-			  }
+			  // ---Key generation algorithm TX---
+			  // Wait for 100 RSSI values
+			  if(ptrdev->RSSI_counter > 100){
+				  // Delay for new keybit is passed
+				  if (ptrdev->key_chosen_wait_timer == 0){
+					  // RSS below threshold -> keybit = 0
+					  if (Rx_RSSI < (ptrdev->RSSI_Mean - settings_threshold)){
+						  if ((ptrdev->keybits_8bit) < 8){
+							  ptrdev->key_8bit = ((ptrdev->key_8bit)<<1) | 0;
+							  (ptrdev->keybits_8bit)++;
+							  encryption_byte = packet_type_keybit_chosen;
 
-			  else if (ptrdev->keybytes_32bit == 4){
-				  // Update 128-bit key with new 32-bit key ==> niet hierin doen, maar enkel eens CRC response ok
-
-				  //CRC_send();
-
-				  (ptrdev->key_counter_32bit)++;
-				  (ptrdev->keywords_128bit)++;
-				  (ptrdev->keybytes_32bit) = 0;
-
-
-			  	}
-
-			  else if (ptrdev->keybits_8bit == 8){	// Hamming check every 8 bits
-				  //Hamming_send(Key_New);
-
-				  // Shift 8-bit key in 32-bit key
-				  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
-
-				  ptrdev->key_8bit = 0;
-				  ptrdev->keybits_8bit = 0;
-				  (ptrdev->keybytes_32bit)++;
-
-				  uint8_t TxBuf[32];
-				  sprintf(TxBuf, "%lu\r\n", (unsigned long) (ptrdev->key_32bit));
-				  //sprintf(TxBuf, "%lu", (unsigned long) (ptrdev->key_32bit));
-				  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-			  }
-			  else{
-				  // Wait for 100 RSSI values
-				  if(ptrdev->RSSI_counter > 100){
-					  // Delay for new keybit is passed
-					  if (ptrdev->key_chosen_wait_timer == 0){
-						  // RSS below threshold -> keybit = 0
-						  if (Rx_RSSI < (ptrdev->RSSI_Mean - settings_threshold)){
-							  if ((ptrdev->keybits_8bit) < 8){
-								  ptrdev->key_8bit = ((ptrdev->key_8bit)<<1) | 0;
-								  (ptrdev->keybits_8bit)++;
-								  encryption_byte = 1;
-
-
-								  ptrdev->key_chosen_wait_timer = 8;
-							  }
-						  }
-						  // RSS above threshold -> keybit = 0
-						  else if (Rx_RSSI > (ptrdev->RSSI_Mean + settings_threshold)){
-							  if ((ptrdev->keybits_8bit) < 8){
-								  ptrdev->key_8bit = ((ptrdev->key_8bit)<<1) | 1;
-								  (ptrdev->keybits_8bit)++;
-								  encryption_byte = 1;
-
-								  ptrdev->key_chosen_wait_timer = 8;
-							  	}
+							  ptrdev->key_chosen_wait_timer = 8;
 						  }
 					  }
-					  else{
-						  (ptrdev->key_chosen_wait_timer)--;
+					  // RSS above threshold -> keybit = 1
+					  else if (Rx_RSSI > (ptrdev->RSSI_Mean + settings_threshold)){
+						  if ((ptrdev->keybits_8bit) < 8){
+							  ptrdev->key_8bit = ((ptrdev->key_8bit)<<1) | 1;
+							  (ptrdev->keybits_8bit)++;
+							  encryption_byte = packet_type_keybit_chosen;
+
+							  ptrdev->key_chosen_wait_timer = 8;
+						  }
 					  }
 				  }
+				  else{
+					  (ptrdev->key_chosen_wait_timer)--;
+				  }
+
+				  // Hamming
+				  if(ptrdev->keybits_8bit == 8 && ptrdev->keybytes_32bit != 4 && ptrdev->keywords_128bit != 4){
+					  // Prepare hamming
+					  // Hamming_send(Key_New);
+
+					  // Shift 8-bit key in 32-bit key + update parameters
+					  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
+					  ptrdev->key_8bit = 0;
+					  ptrdev->keybits_8bit = 0;
+					  (ptrdev->keybytes_32bit)++;
+
+					  encryption_byte = packet_type_keybit_chosen_Hamming;
+
+					  // Transmit over USB
+					  uint8_t TxBuf[32];
+					  sprintf(TxBuf, "%lu\r\n", (unsigned long) (ptrdev->key_32bit));
+					  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+				  }
+				  // CRC
+				  else if(ptrdev->keybits_8bit == 8 && ptrdev->keybytes_32bit == 4 && ptrdev->keywords_128bit != 4){
+					  // Update 128-bit key with new 32-bit key ==> niet hierin doen, maar enkel eens CRC response ok
+
+					  // calculate CRC + set flag for packet with CRC on networklayer
+
+					  (ptrdev->key_counter_32bit)++;
+					  (ptrdev->keywords_128bit)++; //enkel als response CRC ok is
+					  (ptrdev->keybytes_32bit) = 0;
+
+					  encryption_byte = packet_type_keybit_chosen_CRC;
+
+				  }
+				  else if(ptrdev->keybits_8bit == 8 && ptrdev->keybytes_32bit == 4 && ptrdev->keywords_128bit == 4){
+					  // Hoeft niet per se omdat we de 128-bit sleutel per 32-bit updaten als CRC response ok is
+					  (ptrdev->key_counter)++;
+					  ptrdev->keywords_128bit = 0;
+				  }
 			  }
+			  if(encryption_byte !=0){
+				  HAL_Delay(1); //Delay om RX niet té flooden met packets
+				  writeKeybitPacket(ptrdev, encryption_byte);
+				  encryption_byte = 0;
+			  }
+
 
 			  //sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) ptrdev->RSSI_Mean);
 			  //CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
@@ -1673,7 +1763,7 @@ void transmitAudioPacket(void){
 	uint8_t packet_type;
 	uint8_t cbuf_ret = 0;
 
-	// Packet length (1byte), packet type (1byte), source_ID (1byte), RSSI byte (1byte)
+	// Packet length (1byte), packet type (1byte), dest_ID, source_ID (1byte), RSSI byte (1byte)
 	uint8_t packet_total_length = 5 + settings_audiosamples_length;
 
 	if(settings_encryption){
@@ -1731,24 +1821,34 @@ void readPacket(void){
 	HAL_SPI_Receive_IT(&hspi1, &Rx_packet_type, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_to_ID, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_from_ID, 1);
+
 	if(Rx_to_ID == broadcast_ID){
 		if(Rx_packet_type == packet_type_audio_encrypted || Rx_packet_type == packet_type_audio){
 			for(uint8_t i = 0; i < settings_audiosamples_length; i++){
 				HAL_SPI_Receive_IT(&hspi1, &data[i], 1);
 			}
 
-			//HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
 			HAL_SPI_Receive_IT(&hspi1, &Rx_RSSI, 1);
 			HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 		}
 	}
 	else if (Rx_to_ID == source_ID){
+		// Reply from audio packet
 		if(Rx_packet_type == packet_type_reply){
 			for(uint8_t i = 0; i < settings_audiosamples_length; i++){
 				HAL_SPI_Receive_IT(&hspi1, &data[i], 1);
 			}
 		}
-		//HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
+		// Keybit chosen by TX
+		else if(Rx_packet_type == packet_type_keybit_chosen){
+			asm("nop");;
+		}
+		// Keybit chosen by TX with Hamming-code
+		else if(Rx_packet_type == packet_type_keybit_chosen_Hamming){
+			uint8_t Hamming;
+			HAL_SPI_Receive_IT(&hspi1, &Hamming, 1);
+		}
+
 		HAL_SPI_Receive_IT(&hspi1, &Rx_RSSI, 1);
 		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 	}
@@ -1757,13 +1857,11 @@ void readPacket(void){
 	}
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
-	// Wait for SPI to finish
-	//while (ADF_SPI_READY() == 0);
 }
 
 
 void writeKeyPacket(void){
-	// Packet length (1byte), packet type (1byte), ID (1byte), RSSI byte (1byte)
+	// Packet length (1byte), packet type (1byte), dest_ID, source_ID (1byte), RSSI byte (1byte)
 	uint8_t packet_total_length = 5+settings_audiosamples_length;
 
 	dest_ID = Rx_from_ID;
@@ -1781,6 +1879,73 @@ void writeKeyPacket(void){
 	}
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 	ADF_set_Tx_mode();
+}
+
+void writeKeybitPacket(device *ptrdev, uint8_t keybit_type){
+	// Packet length (1byte), packet type (1byte), dest_ID, source_ID (1byte), RSSI byte (1byte)
+	uint8_t packet_total_length = 5;
+
+	if(keybit_type == packet_type_keybit_chosen){
+		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen, dest_ID = source_ID , source_ID};
+		// Write data to packet RAM
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
+		HAL_SPI_Transmit_IT(&hspi1, header, packet_total_length);
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
+		ADF_set_Tx_mode();
+	}
+	else if(keybit_type == packet_type_keybit_chosen_Hamming){
+		//packet length + Hamming-code (1byte)
+		packet_total_length++;
+
+		uint8_t Hamming_code = 0x11;
+		//Calculate Hamming from ptrdev
+
+		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_Hamming, dest_ID = ptrdev->ID , source_ID, Hamming_code};
+		// Write data to packet RAM
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
+		HAL_SPI_Transmit_IT(&hspi1, header, packet_total_length);
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
+		ADF_set_Tx_mode();
+	}
+	else if(keybit_type == packet_type_keybit_chosen_CRC){
+		//packet length + Hamming-code (1byte) + CRC (4byte)
+		//packet_total_length+5;
+
+		uint8_t Hamming_code;
+		//Calculate Hamming from ptrdev
+
+		uint8_t CRC_check[4];
+		//Calculate CRC from ptrdev
+		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_CRC, dest_ID = ptrdev->ID , source_ID};
+		//uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_CRC, dest_ID = ptrdev->ID , source_ID, Hamming_code, CRC_check[0], CRC_check[1], CRC_check[2], CRC_check[3]};
+
+		// Write data to packet RAM
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
+		HAL_SPI_Transmit_IT(&hspi1, header, packet_total_length);
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
+		ADF_set_Tx_mode();
+	}
+
+	else if(keybit_type == packet_type_keybit_CRC_ok){
+		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_CRC_ok, dest_ID = ptrdev->ID , source_ID};
+
+		// Write data to packet RAM
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
+		HAL_SPI_Transmit_IT(&hspi1, header, packet_total_length);
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
+		ADF_set_Tx_mode();
+	}
+
+	else if(keybit_type == packet_type_reply){
+		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_CRC_ok, dest_ID = ptrdev->ID , source_ID};
+
+		// Write data to packet RAM
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
+		HAL_SPI_Transmit_IT(&hspi1, header, packet_total_length);
+		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
+		ADF_set_Tx_mode();
+	}
+
 }
 
 void playAudio(){

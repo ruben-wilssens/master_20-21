@@ -8,5 +8,5 @@
  Supervisors:\
  Jelle Jocqué\
  Joryan Sennesael\
- prof. dr. ing. Patrick Van Torre\
+ prof. dr. ir. Patrick Van Torre\
  prof. dr. ir. Jo Verhaevert
