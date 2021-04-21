@@ -239,6 +239,8 @@ uint8_t ADF_RC_READY(void){
 	if ((ADF_status&0xA0) == 0xA0)
 		return 1;
 	else
+		//ADF_clear_Tx_flag(); //debug test
+		//ADF_clear_Rx_flag(); //debug test
 		return 0;
 }
 

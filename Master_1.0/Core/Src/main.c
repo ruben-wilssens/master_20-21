@@ -8,6 +8,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "usbd_cdc_if.h"
+#include "ssh1106.h"
+#include "OLED.h"
 #include <math.h>
 #include "CBUF.h"
 #include "string.h"
@@ -17,22 +19,22 @@
 /* USER CODE BEGIN PTD */
 typedef struct{
 	uint8_t ID;
-	uint32_t RSSI_counter;
-	uint16_t RSSI_Mean;
+	uint32_t RSSI_counter;			// received packets
+	uint16_t RSSI_Mean;				// exponential moving average
 	double RSSI_Mean_Double;
 
-	uint8_t keybits_8bit;
-	uint8_t key_8bit;
+	uint8_t keybits_8bit;			// current number of bits of 8-bit key
+	uint8_t key_8bit;				// current 8-bit key
 
-	uint8_t keybytes_32bit;
-	uint32_t key_32bit;
-	uint16_t key_counter_32bit;
+	uint8_t keybytes_32bit;			// current number of new 8-bit keys in 32-bit key
+	uint32_t key_32bit;				// current 32-bit key
+	uint16_t key_counter_32bit;		// number of generated 32-bit keys
 
-	uint8_t keywords_128bit;
-	uint32_t key_128bit[4];
-	uint16_t key_counter;
+	uint8_t keywords_128bit;		// current number of new 32-bit keys in 128-bit key (also serves as index)
+	uint32_t key_128bit[4];			// current 128-bit key
+	uint16_t key_counter;			// number of generated 128-bit keys
 
-	uint8_t key_chosen_wait_timer;
+	uint8_t key_chosen_wait_timer;	// delay for new keybit
 } device;
 
 // Pointer to device struct
@@ -48,7 +50,7 @@ device dev1 = {
 		key_8bit: 0xA1,
 		keybytes_32bit: 0,
 		key_32bit: 0x80808080,
-		key_counter_32bit: 0, // = keywords_128bit % 4
+		key_counter_32bit: 0,
 		keywords_128bit: 0,
 		key_128bit: {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C},
 		key_counter: 0x00,
@@ -107,54 +109,58 @@ UART_HandleTypeDef huart5;
 
 /* USER CODE BEGIN PV */
 
-/* Default settings */
-char settings_mode = 'R';							// mode can be R (RX) or T (TX)
+/* ---Default settings--- */
+char settings_mode = 'R';								// mode can be R (RX) or T (TX)
+
+#define settings_audiosamples_length 48					// samplecount per audio packet -> packetrate = 8000^-1 * settings_audiosamples_length
+uint8_t settings_volume = 30;
+uint8_t HGM = 0;										// 0 = LGM LNA, 1 = HGM LNA
+uint8_t settings_encryption = 1;						// 0 = off, 1 = on
+uint8_t settings_threshold = 3;							// threshold for choosing keybits
+double ALPHA = 0.1;										// weighting factor exponential moving average
+const uint8_t settings_keybit_delay = 8;				// packets between new possible keybit
 
 
+uint8_t encryption_byte = 0;
+
+uint8_t dest_ID = 0xFF;
 const uint8_t source_ID = 0x01;
 const uint8_t broadcast_ID = 0xFF;
-uint8_t dest_ID = 0xFF; //0xFF = broadcast
-//uint8_t settings_audiosamples_length = 48;	// number of audio samples in audio packet (must be multiple of 16)
-#define settings_audiosamples_length 48
-uint8_t settings_volume = 15;
-uint8_t settings_threshold = 3;
 
 
+/* ---Packet settings--- */
 const uint8_t packet_type_audio = 0xFE;
 const uint8_t packet_type_audio_encrypted = 0xFF;
 
-const uint8_t packet_type_keybit_chosen = 0xAA;
-const uint8_t packet_type_keybit_chosen_Hamming = 0xAB; //Hamming
-const uint8_t packet_type_keybit_chosen_CRC = 0xAC; //Hamming+CRC
+const uint8_t packet_type_keybit_chosen = 0xAA;			// keybit chosen by TX
+const uint8_t packet_type_keybit_chosen_Hamming = 0xAB; // 8th keybit chosen by TX + Hamming
+const uint8_t packet_type_keybit_chosen_CRC = 0xAC; 	// 8th keybit chosen by TX + Hamming (4th byte) + CRC
 
-const uint8_t packet_type_keybit_CRC_ok = 0xA0;
-const uint8_t packet_type_keybit_CRC_bad = 0xB0;
+const uint8_t packet_type_keybit_CRC_ok = 0xA0;			// CRC ok reply by RX
+const uint8_t packet_type_keybit_CRC_bad = 0xB0;		// CRC bad reply by RX
 
 const uint8_t packet_type_reply = 0x0F;
 
+/* ---Packet reception (read)--- */
+uint8_t Rx_packet_length;
+uint8_t Rx_packet_type;
+uint8_t Rx_from_ID;
+uint8_t Rx_to_ID;
+uint8_t Rx_data_length;
+uint8_t Hamming;
+uint8_t Rx_RSSI;
 
-
-uint8_t settings_encryption = 1;					// 0 = off, 1 = on
-
-
-uint8_t encryption_byte = 0; //0 = niks, 1 = keybit, 2 = CRC
-
-
-/* External interrupts */
+/* ---External interrupts--- */
 uint8_t INT_PACKET_RECEIVED = 0;
 uint8_t INT_PACKET_SENT = 0;
 
-
-uint8_t ADF_status;//test variable
-uint8_t HGM = 0;
 uint16_t packets_received = 0;
 uint16_t packets_received_prev = 0;
 uint16_t packets_sent = 0;
 uint16_t packets_sent_prev = 0;
 uint32_t RSSI_prev = 0;
 
-
-/* Button states for debouncing */
+/* ---Button states for debouncing--- */
 static volatile int POWER_state = 1;
 static volatile int TALK_state = 1;
 static volatile int UP_state = 1;
@@ -162,8 +168,7 @@ static volatile int DOWN_state = 1;
 static volatile int LEFT_state = 1;
 static volatile int RIGHT_state = 1;
 
-
-/* Audio */
+/* ---Audio--- */
 uint8_t adc_value = 0;
 uint16_t adc_value_downsampled = 0;
 uint32_t adc_counter = 0;
@@ -172,24 +177,13 @@ uint16_t cbuf_size = 0;
 uint8_t data[settings_audiosamples_length];
 uint8_t samples[settings_audiosamples_length];
 
-/* Transceiver variables */
-// ADF frequency in [Hz/10kHz] -> 2,45 GHz
-const uint32_t settings_frequency = 245000;
+/* ---Transceiver variables--- */
+const uint32_t settings_frequency = 245000;				// ADF frequency in [Hz/10kHz] -> 2,45 GHz
 // Buffer starting address
 uint8_t RX_BUFFER_BASE;
 uint8_t TX_BUFFER_BASE;
 
-
-/* Packet reception (read) */
-uint8_t Rx_packet_length;
-uint8_t Rx_packet_type;
-uint8_t Rx_from_ID;
-uint8_t Rx_to_ID;
-uint8_t Rx_data_length;
-uint8_t Rx_TEST;
-uint8_t Rx_RSSI;
-
-double ALPHA = 0.1;
+uint8_t ADF_status;										// SPI status word return ADF7242
 
 
 /* USER CODE END PV */
@@ -214,7 +208,6 @@ static void MX_TIM9_Init(void);
 static void MX_CRYP_Init(void);
 /* USER CODE BEGIN PFP */
 
-
 void HAL_GPIO_EXTI_Callback(uint16_t);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *);
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef*);
@@ -222,7 +215,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef*);
 void startup(void);
 void setup(void);
 
-void potmeterInit(uint8_t);
+void digipotInit(uint8_t);
 void LED_RGB_status(uint16_t , uint16_t , uint16_t );
 
 void playAudio(void);
@@ -233,6 +226,10 @@ void transmitAudioPacket(void);
 void readPacket(void);
 
 void writeKeyPacket(void);
+void writeKeybitPacket(device*, uint8_t);
+
+uint8_t Hamming_create(uint8_t);
+uint8_t Hamming_correct(uint8_t, uint8_t);
 
 /* USER CODE END PFP */
 
@@ -298,7 +295,7 @@ int main(void)
   LED_RGB_status(0, 0, 35);
 
   startup();
-  potmeterInit(settings_volume);
+  digipotInit(settings_volume);
 
   // OLED interrupt TIM9 (1s)
   HAL_TIM_Base_Start_IT(&htim9);
@@ -330,7 +327,7 @@ int main(void)
 			  readPacket();
 			  if((Rx_to_ID == source_ID) || (Rx_to_ID == broadcast_ID)){
 				  //writeKeyPacket();
-				  encryption_byte = 0;
+				  encryption_byte = packet_type_reply;
 				  if (!(ptrdev->RSSI_counter)){
 					  ptrdev->RSSI_Mean_Double = Rx_RSSI;
 					  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
@@ -374,6 +371,7 @@ int main(void)
 					  }
 
 					  // Do a Hamming correction with Rx_Hamming_code
+
 
 					  // Shift 8-bit key in 32-bit key + update parameters
 					  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
@@ -461,7 +459,7 @@ int main(void)
 							  (ptrdev->keybits_8bit)++;
 							  encryption_byte = packet_type_keybit_chosen;
 
-							  ptrdev->key_chosen_wait_timer = 8;
+							  ptrdev->key_chosen_wait_timer = settings_keybit_delay;
 						  }
 					  }
 					  // RSS above threshold -> keybit = 1
@@ -471,7 +469,7 @@ int main(void)
 							  (ptrdev->keybits_8bit)++;
 							  encryption_byte = packet_type_keybit_chosen;
 
-							  ptrdev->key_chosen_wait_timer = 8;
+							  ptrdev->key_chosen_wait_timer = settings_keybit_delay;
 						  }
 					  }
 				  }
@@ -481,8 +479,8 @@ int main(void)
 
 				  // Hamming
 				  if(ptrdev->keybits_8bit == 8 && ptrdev->keybytes_32bit != 4 && ptrdev->keywords_128bit != 4){
-					  // Prepare hamming
-					  // Hamming_send(Key_New);
+					  // Prepare Hamming-code
+					  Hamming = Hamming_create(ptrdev->key_8bit);
 
 					  // Shift 8-bit key in 32-bit key + update parameters
 					  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
@@ -497,6 +495,7 @@ int main(void)
 					  sprintf(TxBuf, "%lu\r\n", (unsigned long) (ptrdev->key_32bit));
 					  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
 				  }
+
 				  // CRC
 				  else if(ptrdev->keybits_8bit == 8 && ptrdev->keybytes_32bit == 4 && ptrdev->keywords_128bit != 4){
 					  // Update 128-bit key with new 32-bit key ==> niet hierin doen, maar enkel eens CRC response ok
@@ -1490,7 +1489,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 			//ADD FUNCTIONALITY
 
 			// Debug
-			test_transmitDummyPacket();
 
 			DOWN_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
@@ -1500,11 +1498,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		if (HAL_GPIO_ReadPin(BTN_LEFT_GPIO_Port, BTN_LEFT_Pin)){
 
 			//ADD FUNCTIONALITY
-
-			// Debug
-			uint8_t ret;
-			ret = ADF_status_word();
-			asm("nop");
 
 			LEFT_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
@@ -1522,62 +1515,26 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 	}
 
-	// OLED
-	// Gives buggy audio
-	/*
+	// Audio has vibrato :( [comment out TIM9 'T']
 	if(htim->Instance == TIM9){
 		if(settings_mode == 'R'){
 			OLED_clear_screen();
-			OLED_print_variable("Packets: ", packets_received, 0, 6);
-			OLED_print_variable("Packet/s: ", packets_received-packets_received_prev, 0, 16);
-			uint8_t RSSI = 0;
-			RSSI = ADF_SPI_MEM_RD(0x30C);
-			//delay_us(10);
-			OLED_print_variable("TEST:", Rx_TEST, 0, 26);
-			OLED_print_variable("RSSI   :", (int8_t) Rx_RSSI, 0, 36);
-			OLED_print_variable("RSSI RD:", (int8_t) RSSI, 0, 46);
+			OLED_print_status(settings_mode);
+			OLED_print_variable("Packets R: ", packets_received, 5, 20);
+			OLED_print_variable("Packet/s:  ", packets_received-packets_received_prev, 5, 30);
+			OLED_print_variable("Packets T: ", packets_sent, 5, 40);
 			OLED_update();
 			packets_received_prev = packets_received;
 		}
 		else if(settings_mode == 'T'){
 			OLED_clear_screen();
-			OLED_print_variable("Packets: ", packets_sent, 0, 6);
-			OLED_print_variable("Packet/s: ", packets_sent-packets_sent_prev, 0, 16);
-			//uint8_t RSSI = 0;
-			//RSSI = ADF_SPI_MEM_RD(0x30C);
-			//delay_us(10);
-			//OLED_print_variable("TEST:", Rx_TEST, 0, 26);
-			//OLED_print_variable("RSSI   :", Rx_RSSI, 0, 36);
-			//OLED_print_variable("RSSI RD:", RSSI, 0, 46);
-			//OLED_print_hexadecimal("Key:", Key_Current, 0, 36);
+			OLED_print_status(settings_mode);
+			OLED_print_variable("Packets T: ", packets_sent, 5, 20);
+			OLED_print_variable("Packet/s:  ", packets_sent-packets_sent_prev, 5, 30);
+			OLED_print_variable("Packets R: ", packets_received, 5, 40);
 			OLED_update();
 			packets_sent_prev = packets_sent;
 		}
-	}
-	*/
-
-	if(htim->Instance == TIM9){
-		uint16_t txbuf[6];//16
-		uint16_t pckts;
-		if(settings_mode == 'T'){
-			pckts = packets_sent-packets_sent_prev;
-			packets_sent_prev = packets_sent;
-		}
-		else if(settings_mode == 'R'){
-			pckts = packets_received-packets_received_prev;
-			packets_received_prev = packets_received;
-		}
-
-		uint16_t RSSI;
-
-		RSSI = ptrdev->RSSI_counter - RSSI_prev;
-		RSSI_prev = ptrdev->RSSI_counter;
-
-		//sprintf(txbuf, "%u %u\r\n", (uint16_t) pckts, (uint16_t) RSSI);
-		//CDC_Transmit_FS((uint16_t *)txbuf, strlen(txbuf));
-
-		//sprintf(buffer, "%d %d\r\n", (int8_t) Rx_RSSI, (int8_t) RSSI_Mean);
-		//CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
 	}
 }
 
@@ -1613,15 +1570,17 @@ void startup(void){
 	__HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB);
 
 	OLED_init();
-	OLED_print_text("Encrypted", 39, 16);
-	OLED_print_text("Walkie Talkie", 18, 26);
+	OLED_print_credits();
+	OLED_print_status(settings_mode);
 	OLED_update();
-
 	// Setup registers for transceiver
 	ADF_Init(settings_frequency);
 
-	HAL_Delay(500);
-	OLED_clear_screen();
+
+	HAL_Delay(1000);
+	//OLED_clear_screen();
+	ssh1106_Fill(Black);
+	ssh1106_UpdateScreen();
 
 	ADF_set_turnaround_Tx_Rx();
 
@@ -1658,6 +1617,8 @@ void setup(){
 			HAL_TIM_OC_Start(&htim5, TIM_CHANNEL_1);
 			HAL_ADC_Start_IT(&hadc1);
 
+			OLED_print_status(settings_mode);
+			OLED_update();
 			//HAL_TIM_Base_Start_IT(&htim9);
 
 			break;
@@ -1678,14 +1639,16 @@ void setup(){
 			HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
 			HAL_TIM_Base_Start_IT(&htim2);
 
-			while(ADF_RC_READY()==0);
-			ADF_set_Rx_mode();
+			OLED_print_status(settings_mode);
+			OLED_update();
+			//while(ADF_RC_READY()==0); //blijft soms hangen als RC niet ready komt
+			ADF_set_Rx_mode(); //werkte 21/03
 			break;
 	}
 
 }
 
-void potmeterInit(uint8_t volume){
+void digipotInit(uint8_t volume){
 	uint8_t value[1];
 	value[0]= volume;
 	HAL_GPIO_WritePin(DPOT_CS_GPIO_Port, DPOT_CS_Pin, GPIO_PIN_RESET);
@@ -1751,7 +1714,6 @@ void test_receiveDummyPacket(void){
 	HAL_SPI_Receive_IT(&hspi1, &Rx_to_ID, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_from_ID, 1);
 	//HAL_SPI_Receive_IT(&hspi1, array, 20);
-	//HAL_SPI_Receive_IT(&hspi1, &Rx_TEST, 1);
 	HAL_SPI_Receive_IT(&hspi1, &Rx_RSSI, 1);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
@@ -1845,7 +1807,6 @@ void readPacket(void){
 		}
 		// Keybit chosen by TX with Hamming-code
 		else if(Rx_packet_type == packet_type_keybit_chosen_Hamming){
-			uint8_t Hamming;
 			HAL_SPI_Receive_IT(&hspi1, &Hamming, 1);
 		}
 
@@ -1897,10 +1858,7 @@ void writeKeybitPacket(device *ptrdev, uint8_t keybit_type){
 		//packet length + Hamming-code (1byte)
 		packet_total_length++;
 
-		uint8_t Hamming_code = 0x11;
-		//Calculate Hamming from ptrdev
-
-		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_Hamming, dest_ID = ptrdev->ID , source_ID, Hamming_code};
+		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_Hamming, dest_ID = ptrdev->ID , source_ID, Hamming};
 		// Write data to packet RAM
 		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Transmit_IT(&hspi1, header, packet_total_length);
@@ -1957,6 +1915,91 @@ void playAudio(){
 		cbuf_ret = circular_buf_get(audio_buffer_handle_t, &sample);
 		HAL_DAC_SetValue(&hdac, DAC1_CHANNEL_1, DAC_ALIGN_8B_R, sample);
 	}
+}
+
+uint8_t Hamming_create(uint8_t key){
+	uint8_t bit_0 = key & 0x01;
+	uint8_t bit_1 = (key>>1) & 0x01;
+	uint8_t bit_2 = (key>>2) & 0x01;
+	uint8_t bit_3 = (key>>3) & 0x01;
+	uint8_t bit_4 = (key>>4) & 0x01;
+	uint8_t bit_5 = (key>>5) & 0x01;
+	uint8_t bit_6 = (key>>6) & 0x01;
+	uint8_t bit_7 = (key>>7) & 0x01;
+
+	uint8_t parity_0 = bit_0 ^ bit_1 ^ bit_3 ^ bit_4 ^ bit_6;
+	uint8_t parity_1 = bit_0 ^ bit_2 ^ bit_3 ^ bit_5 ^ bit_6;
+	uint8_t parity_2 = bit_1 ^ bit_2 ^ bit_3 ^ bit_7;
+	uint8_t parity_3 = bit_4 ^ bit_5 ^ bit_6 ^ bit_7;
+
+	uint8_t Tx_code = (parity_3 * 8) + (parity_2 * 4) + (parity_1 * 2) + parity_0;
+	Tx_code = 0x0F & Tx_code;
+	return Tx_code;
+}
+
+uint8_t Hamming_correct(uint8_t Tx_code, uint8_t key){
+	uint8_t bit_0 = key & 0x01;
+	uint8_t bit_1 = (key>>1) & 0x01;
+	uint8_t bit_2 = (key>>2) & 0x01;
+	uint8_t bit_3 = (key>>3) & 0x01;
+	uint8_t bit_4 = (key>>4) & 0x01;
+	uint8_t bit_5 = (key>>5) & 0x01;
+	uint8_t bit_6 = (key>>6) & 0x01;
+	uint8_t bit_7 = (key>>7) & 0x01;
+
+	uint8_t parity_0 = bit_0 ^ bit_1 ^ bit_3 ^ bit_4 ^ bit_6;
+	uint8_t parity_1 = bit_0 ^ bit_2 ^ bit_3 ^ bit_5 ^ bit_6;
+	uint8_t parity_2 = bit_1 ^ bit_2 ^ bit_3 ^ bit_7;
+	uint8_t parity_3 = bit_4 ^ bit_5 ^ bit_6 ^ bit_7;
+
+	uint8_t Rx_code = (parity_3 * 8) + (parity_2 * 4) + (parity_1 * 2) + parity_0;
+
+	if (Rx_code != Tx_code){
+		uint8_t control_0 = 0;
+		uint8_t control_1 = 0;
+		uint8_t control_2 = 0;
+		uint8_t control_3 = 0;
+
+		if (parity_0 != (Tx_code & 0x01))
+			control_0 = 1;
+		if (parity_1 != ((Tx_code>>1) & 0x01))
+			control_1 = 1;
+		if (parity_2 != ((Tx_code>>2) & 0x01))
+			control_2 = 1;
+		if (parity_3 != ((Tx_code>>3) & 0x01))
+			control_3 = 1;
+
+		uint8_t control = (control_3 * 8) + (control_2 * 4) + (control_1 * 2) + control_0;
+
+		// Key correction
+		switch(control)	{
+			case 3:
+				key ^= 1UL << 0;
+				break;
+			case 5:
+				key ^= 1UL << 1;
+				break;
+			case 6:
+				key ^= 1UL << 2;
+				break;
+			case 7:
+				key ^= 1UL << 3;
+				break;
+			case 9:
+				key ^= 1UL << 4;
+				break;
+			case 10:
+				key ^= 1UL << 5;
+				break;
+			case 11:
+				key ^= 1UL << 6;
+				break;
+			case 12:
+				key ^= 1UL << 7;
+				break;
+		}
+	}
+	return key;
 }
 
 
