@@ -12,7 +12,7 @@ extern SPI_HandleTypeDef hspi1;
 extern uint8_t RX_BUFFER_BASE;
 extern uint8_t TX_BUFFER_BASE;
 
-extern uint8_t status;
+extern uint8_t ADF_status;
 
 /* Functions -------------------------------------------------------------------*/
 
@@ -73,11 +73,11 @@ void ADF_Init(uint32_t frequency){
 void ADF_reset(void){
 	// Write RC_RESET command
 	uint8_t byte[] = {0xC8};
-	uint8_t status;
+	uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, byte, 1, 50);
-	HAL_SPI_Receive(&hspi1, &status, 1, 50);
+	HAL_SPI_Receive(&hspi1, &ADF_status, 1, 50);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 }
 
@@ -170,7 +170,7 @@ void ADF_set_turnaround_Rx_Tx(void){
 
 void ADF_set_IDLE_mode(void){
 	uint8_t bytes[] = {0xB2};
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit_IT(&hspi1, bytes, 1);
@@ -181,7 +181,7 @@ void ADF_set_IDLE_mode(void){
 
 void ADF_set_PHY_RDY_mode(void){
 	uint8_t bytes[] = {0xb3};
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit_IT(&hspi1, bytes, 1);
@@ -192,7 +192,7 @@ void ADF_set_PHY_RDY_mode(void){
 
 void ADF_set_Tx_mode(void){
 	uint8_t bytes[] = {0xb5};
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit_IT(&hspi1, bytes, 1);
@@ -203,7 +203,7 @@ void ADF_set_Tx_mode(void){
 
 void ADF_set_Rx_mode(void){
 	uint8_t bytes[] = {0xb4};
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, bytes, 1,50);
@@ -214,14 +214,14 @@ void ADF_set_Rx_mode(void){
 
 /* Check if transceiver is ready for SPI access (p.73) */
 uint8_t ADF_SPI_READY(void){
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, 0xff, 1, 50);
-	HAL_SPI_Receive(&hspi1, &status, 1, 50);
+	HAL_SPI_Receive(&hspi1, &ADF_status, 1, 50);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
-	if ((status&0x80) == 0x80)
+	if ((ADF_status&0x80) == 0x80)
 		return 1;
 	else
 		return 0;
@@ -229,29 +229,29 @@ uint8_t ADF_SPI_READY(void){
 
 /* Check if transceiver is ready for RC command (p.73) */
 uint8_t ADF_RC_READY(void){
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, 0xff, 1, 50);
-	HAL_SPI_Receive(&hspi1, &status, 1, 50);
+	HAL_SPI_Receive(&hspi1, &ADF_status, 1, 50);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
-	if ((status&0xA0) == 0xA0)
+	if ((ADF_status&0xA0) == 0xA0)
 		return 1;
 	else
 		return 0;
 }
 
-/* Check RC_STATUS of SPI status word (p.73) */
+/* Check RC_status of SPI status word (p.73) */
 uint8_t ADF_Rx_READY(void){
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, 0xff, 1, 50);
-	HAL_SPI_Receive(&hspi1, &status, 1, 50);
+	HAL_SPI_Receive(&hspi1, &ADF_status, 1, 50);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
-	if ((status&0xA4) == 0xA4)
+	if ((ADF_status&0xA4) == 0xA4)
 		return 1;
 	else
 		return 0;
@@ -259,14 +259,14 @@ uint8_t ADF_Rx_READY(void){
 
 /* Check RC_STATUS of SPI status word (p.73) */
 uint8_t ADF_PHY_RDY_READY(void){
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, 0xff, 1, 50);
-	HAL_SPI_Receive(&hspi1, &status, 1, 50);
+	HAL_SPI_Receive(&hspi1, &ADF_status, 1, 50);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
-	if ((status&0xA3) == 0xA3)
+	if ((ADF_status&0xA3) == 0xA3)
 		return 1;
 	else
 		return 0;
@@ -274,14 +274,14 @@ uint8_t ADF_PHY_RDY_READY(void){
 
 /* Check RC_STATUS of SPI status word (p.73) */
 uint8_t ADF_IDLE_READY(void){
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, 0xff, 1, 50);
-	HAL_SPI_Receive(&hspi1, &status, 1, 50);
+	HAL_SPI_Receive(&hspi1, &ADF_status, 1, 50);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
-	if ((status&0xA1) == 0xA1)
+	if ((ADF_status&0xA1) == 0xA1)
 		return 1;
 	else
 		return 0;
@@ -289,14 +289,14 @@ uint8_t ADF_IDLE_READY(void){
 
 /* Check SPI status word (p.73) */
 uint8_t ADF_status_word(void){
-	//uint8_t status;
+	//uint8_t ADF_status;
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, 0xff, 1, 50);
-	HAL_SPI_Receive(&hspi1, &status, 1, 50);
+	HAL_SPI_Receive(&hspi1, &ADF_status, 1, 50);
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
-	return status;
+	return ADF_status;
 }
 
 void ADF_clear_Rx_flag(void){
