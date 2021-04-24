@@ -120,6 +120,7 @@ uint8_t settings_threshold = 3;							// threshold for choosing keybits
 double ALPHA = 0.1;										// weighting factor exponential moving average
 const uint8_t settings_keybit_delay = 8;				// packets between new possible keybit
 
+uint8_t setting_debugscreen = 0;
 
 uint8_t encryption_byte = 0;
 
@@ -321,6 +322,7 @@ int main(void)
 	  }
 
 	  if (INT_PACKET_RECEIVED){
+		  ADF_clear_Rx_flag(); //test
 		  INT_PACKET_RECEIVED = 0;
 
 		  if (settings_mode == 'R'){
@@ -371,7 +373,7 @@ int main(void)
 					  }
 
 					  // Do a Hamming correction with Rx_Hamming_code
-
+					  (ptrdev->key_8bit) = Hamming_correct(Hamming, ptrdev->key_8bit);
 
 					  // Shift 8-bit key in 32-bit key + update parameters
 					  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
@@ -399,12 +401,13 @@ int main(void)
 					  }
 
 					  // Do a Hamming correction with Rx_Hamming_code
+					  (ptrdev->key_8bit) = Hamming_correct(Hamming, ptrdev->key_8bit);
 
 					  // Shift 8-bit key in 32-bit key + update parameters
 					  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
 					  ptrdev->key_8bit = 0;
 					  ptrdev->keybits_8bit = 0;
-					  (ptrdev->keybytes_32bit)++;
+					  (ptrdev->keybytes_32bit) = 0;
 
 					  // Generate CRC of Rx-key + do CRC check with Tx CRC
 
@@ -478,14 +481,16 @@ int main(void)
 				  }
 
 				  // Hamming
-				  if(ptrdev->keybits_8bit == 8 && ptrdev->keybytes_32bit != 4 && ptrdev->keywords_128bit != 4){
+				  if(ptrdev->keybits_8bit == 8){
 					  // Prepare Hamming-code
 					  Hamming = Hamming_create(ptrdev->key_8bit);
 
-					  // Shift 8-bit key in 32-bit key + update parameters
+					  // Shift 8-bit key in 32-bit key
 					  ptrdev->key_32bit = ((ptrdev->key_32bit)<<8) | (ptrdev->key_8bit);
+					  // Reset 8-bit key
 					  ptrdev->key_8bit = 0;
 					  ptrdev->keybits_8bit = 0;
+					  // Update number of 8-bit keys in 32-bit key
 					  (ptrdev->keybytes_32bit)++;
 
 					  encryption_byte = packet_type_keybit_chosen_Hamming;
@@ -497,26 +502,20 @@ int main(void)
 				  }
 
 				  // CRC
-				  else if(ptrdev->keybits_8bit == 8 && ptrdev->keybytes_32bit == 4 && ptrdev->keywords_128bit != 4){
-					  // Update 128-bit key with new 32-bit key ==> niet hierin doen, maar enkel eens CRC response ok
+				  if(ptrdev->keybytes_32bit == 4){
 
-					  // calculate CRC + set flag for packet with CRC on networklayer
+					  // calculate CRC
 
+					  // Update number of "new" 32-bit keys
 					  (ptrdev->key_counter_32bit)++;
-					  (ptrdev->keywords_128bit)++; //enkel als response CRC ok is
 					  (ptrdev->keybytes_32bit) = 0;
 
 					  encryption_byte = packet_type_keybit_chosen_CRC;
 
 				  }
-				  else if(ptrdev->keybits_8bit == 8 && ptrdev->keybytes_32bit == 4 && ptrdev->keywords_128bit == 4){
-					  // Hoeft niet per se omdat we de 128-bit sleutel per 32-bit updaten als CRC response ok is
-					  (ptrdev->key_counter)++;
-					  ptrdev->keywords_128bit = 0;
-				  }
 			  }
 			  if(encryption_byte !=0){
-				  HAL_Delay(1); //Delay om RX niet té flooden met packets
+				  HAL_Delay(1); //Delay om RX niet té flooden met packets ( was 1)
 				  writeKeybitPacket(ptrdev, encryption_byte);
 				  encryption_byte = 0;
 			  }
@@ -1378,7 +1377,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		case ADF7242_IRQ2_Pin:
 			INT_PACKET_RECEIVED = 1;
 			packets_received++;
-			delay_us(6);
+			delay_us(10);//6
 			ADF_clear_Rx_flag();
 			break;
 
@@ -1437,10 +1436,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	if (htim->Instance == TIM11){
 		// Power button pressed
 		if (HAL_GPIO_ReadPin(BTN_PWR_GPIO_Port, BTN_PWR_Pin)){
-
-			//ADD FUNCTIONALITY
-
 			POWER_state = 1;
+
+			ADF_sleep();
+
+			OLED_shutdown();
+			HAL_GPIO_WritePin(CLASS_D_SHDN_GPIO_Port, CLASS_D_SHDN_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(MIC_SHDN_GPIO_Port, MIC_SHDN_Pin, GPIO_PIN_RESET);
+			HAL_TIM_Base_Stop_IT(&htim2);
+			HAL_DAC_Stop(&hdac, DAC_CHANNEL_1);
+			HAL_TIM_Base_Stop_IT(&htim1);
+			HAL_TIM_Base_Stop_IT(&htim3);
+			HAL_TIM_OC_Stop(&htim5, TIM_CHANNEL_1);
+			HAL_ADC_Stop_IT(&hadc1);
+
+			HAL_Delay(250);
+
+			HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
+			HAL_PWR_EnterSTANDBYMode();
+
 			HAL_TIM_Base_Stop_IT(&htim11);
 
 		}
@@ -1459,6 +1473,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 			HAL_TIM_Base_Stop_IT(&htim11);
 
 			// Initialize correct timers, components, interrupts for selected mode
+			HAL_Delay(1);//added later, not sure if needed
 			setup();
 
 		}
@@ -1479,6 +1494,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 				}
 			}
 
+			//ADD FUNCTIONALITY (function up capped)
+
 			UP_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
 		}
@@ -1486,9 +1503,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		// Down button pressed
 		if (HAL_GPIO_ReadPin(BTN_DOWN_GPIO_Port, BTN_DOWN_Pin)){
 
-			//ADD FUNCTIONALITY
-
-			// Debug
+			//ADD FUNCTIONALITY (function down capped)
+			if(setting_debugscreen==0){
+				setting_debugscreen=1;
+				OLED_clear_screen();
+				OLED_print_status(settings_mode);
+				OLED_update();
+			}
+			else{
+				setting_debugscreen=0;
+				OLED_clear_screen();
+				OLED_print_status(settings_mode);
+				OLED_update();
+			}
 
 			DOWN_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
@@ -1497,7 +1524,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		// Left button pressed
 		if (HAL_GPIO_ReadPin(BTN_LEFT_GPIO_Port, BTN_LEFT_Pin)){
 
-			//ADD FUNCTIONALITY
+			//ADD FUNCTIONALITY (menu left cyclic)
 
 			LEFT_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
@@ -1506,7 +1533,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		// Right button pressed
 		if (HAL_GPIO_ReadPin(BTN_RIGHT_GPIO_Port, BTN_RIGHT_Pin)){
 
-			//ADD FUNCTIONALITY
+			//ADD FUNCTIONALITY (menu right cyclic)
 
 			RIGHT_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
@@ -1516,26 +1543,29 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	}
 
 	// Audio has vibrato :( [comment out TIM9 'T']
-	if(htim->Instance == TIM9){
-		if(settings_mode == 'R'){
-			OLED_clear_screen();
-			OLED_print_status(settings_mode);
-			OLED_print_variable("Packets R: ", packets_received, 5, 20);
-			OLED_print_variable("Packet/s:  ", packets_received-packets_received_prev, 5, 30);
-			OLED_print_variable("Packets T: ", packets_sent, 5, 40);
-			OLED_update();
-			packets_received_prev = packets_received;
-		}
-		else if(settings_mode == 'T'){
-			OLED_clear_screen();
-			OLED_print_status(settings_mode);
-			OLED_print_variable("Packets T: ", packets_sent, 5, 20);
-			OLED_print_variable("Packet/s:  ", packets_sent-packets_sent_prev, 5, 30);
-			OLED_print_variable("Packets R: ", packets_received, 5, 40);
-			OLED_update();
-			packets_sent_prev = packets_sent;
+	if(setting_debugscreen){
+		if(htim->Instance == TIM9){
+			if(settings_mode == 'R'){
+				OLED_clear_screen();
+				OLED_print_status(settings_mode);
+				OLED_print_variable("Packets T:  ", packets_sent, 5, 20);
+				OLED_print_variable("Packets R:  ", packets_received, 5, 30);
+				OLED_print_variable("Packet/s R: ", packets_received-packets_received_prev, 5, 40);
+				OLED_update();
+				packets_received_prev = packets_received;
+			}
+			else if(settings_mode == 'T'){
+				OLED_clear_screen();
+				OLED_print_status(settings_mode);
+				OLED_print_variable("Packets T:  ", packets_sent, 5, 20);
+				OLED_print_variable("Packets R:  ", packets_received, 5, 30);
+				OLED_print_variable("Packet/s T: ", packets_sent-packets_sent_prev, 5, 40);
+				OLED_update();
+				packets_sent_prev = packets_sent;
+			}
 		}
 	}
+
 }
 
 
@@ -1604,6 +1634,9 @@ void setup(){
 		case 'T':
 			LED_RGB_status(0, 10, 0);
 
+			ADF_clear_Rx_flag(); //test
+			ADF_clear_Tx_flag(); //test
+
 			// Stop the DAC interface and timer2 (8 kHz)
 			HAL_DAC_Stop(&hdac, DAC_CHANNEL_1);
 			HAL_TIM_Base_Stop_IT(&htim2);
@@ -1626,6 +1659,9 @@ void setup(){
 		case 'R':
 			LED_RGB_status(0, 0, 10);
 
+			ADF_clear_Rx_flag(); //test
+			ADF_clear_Tx_flag(); //test
+
 			// Stop timer5 (16 kHz) and ADC interrupt triggered by TIM5
 			HAL_TIM_OC_Stop(&htim5, TIM_CHANNEL_1);
 			HAL_ADC_Stop_IT(&hadc1);
@@ -1640,6 +1676,9 @@ void setup(){
 			HAL_TIM_Base_Start_IT(&htim2);
 
 			OLED_print_status(settings_mode);
+			//OLED_print_variable("Volume: ", 20, 5, 30);
+			//OLED_print_text("< Thresh.", 1, 54);
+			//OLED_print_text("Encryp. >", 73, 54);
 			OLED_update();
 			//while(ADF_RC_READY()==0); //blijft soms hangen als RC niet ready komt
 			ADF_set_Rx_mode(); //werkte 21/03
@@ -1797,9 +1836,10 @@ void readPacket(void){
 	else if (Rx_to_ID == source_ID){
 		// Reply from audio packet
 		if(Rx_packet_type == packet_type_reply){
-			for(uint8_t i = 0; i < settings_audiosamples_length; i++){
-				HAL_SPI_Receive_IT(&hspi1, &data[i], 1);
-			}
+			asm("nop");;
+			//for(uint8_t i = 0; i < settings_audiosamples_length; i++){
+			//	HAL_SPI_Receive_IT(&hspi1, &data[i], 1);
+			//}
 		}
 		// Keybit chosen by TX
 		else if(Rx_packet_type == packet_type_keybit_chosen){
@@ -1809,11 +1849,25 @@ void readPacket(void){
 		else if(Rx_packet_type == packet_type_keybit_chosen_Hamming){
 			HAL_SPI_Receive_IT(&hspi1, &Hamming, 1);
 		}
-
+		else if(Rx_packet_type == packet_type_keybit_chosen_CRC){
+			asm("nop");;
+		}
+		else if (Rx_packet_type == packet_type_keybit_CRC_ok){
+			asm("nop");;
+			// Update 128-bit key with new 32-bit key ==> niet hierin doen, maar enkel eens CRC response ok
+			// (ptrdev->keywords_128bit)++; //enkel als response CRC ok is
+			// (ptrdev->key_32bit) = 0;
+		}
+		else if (Rx_packet_type == packet_type_keybit_CRC_bad){
+			asm("nop");;
+			// (ptrdev->key_32bit) = 0;
+			// Remove 32-bit key and DONT shift it in 128-bit key
+		}
 		HAL_SPI_Receive_IT(&hspi1, &Rx_RSSI, 1);
 		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 	}
 	else{
+		asm("nop");
 		// Ignore packet
 	}
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
@@ -1856,7 +1910,7 @@ void writeKeybitPacket(device *ptrdev, uint8_t keybit_type){
 	}
 	else if(keybit_type == packet_type_keybit_chosen_Hamming){
 		//packet length + Hamming-code (1byte)
-		packet_total_length++;
+		packet_total_length+=1;
 
 		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_Hamming, dest_ID = ptrdev->ID , source_ID, Hamming};
 		// Write data to packet RAM
@@ -1868,13 +1922,11 @@ void writeKeybitPacket(device *ptrdev, uint8_t keybit_type){
 	else if(keybit_type == packet_type_keybit_chosen_CRC){
 		//packet length + Hamming-code (1byte) + CRC (4byte)
 		//packet_total_length+5;
-
-		uint8_t Hamming_code;
-		//Calculate Hamming from ptrdev
+		packet_total_length+=1;
 
 		uint8_t CRC_check[4];
 		//Calculate CRC from ptrdev
-		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_CRC, dest_ID = ptrdev->ID , source_ID};
+		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_CRC, dest_ID = ptrdev->ID , source_ID, Hamming};
 		//uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_chosen_CRC, dest_ID = ptrdev->ID , source_ID, Hamming_code, CRC_check[0], CRC_check[1], CRC_check[2], CRC_check[3]};
 
 		// Write data to packet RAM
@@ -1895,7 +1947,7 @@ void writeKeybitPacket(device *ptrdev, uint8_t keybit_type){
 	}
 
 	else if(keybit_type == packet_type_reply){
-		uint8_t header[] = {0x10, packet_total_length, packet_type_keybit_CRC_ok, dest_ID = ptrdev->ID , source_ID};
+		uint8_t header[] = {0x10, packet_total_length, packet_type_reply, dest_ID = ptrdev->ID , source_ID};
 
 		// Write data to packet RAM
 		HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);

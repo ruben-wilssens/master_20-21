@@ -207,9 +207,11 @@ void ADF_set_Rx_mode(void){
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 	HAL_SPI_Transmit(&hspi1, bytes, 1,50);
+	HAL_SPI_Receive(&hspi1, &ADF_status, 1, 50); //debug
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
 	//delay_us(200); // (max transition timing) p.14
+	//asm("nop");
 }
 
 /* Check if transceiver is ready for SPI access (p.73) */
