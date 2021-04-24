@@ -226,7 +226,6 @@ void test_receiveDummyPacket(void);
 void transmitAudioPacket(void);
 void readPacket(void);
 
-void writeKeyPacket(void);
 void writeKeybitPacket(device*, uint8_t);
 
 uint8_t Hamming_create(uint8_t);
@@ -287,7 +286,6 @@ int main(void)
 
   HAL_TIM_Base_Start(&htim7);
 
-
   // Start PWM timers for RGB led
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
@@ -328,7 +326,6 @@ int main(void)
 		  if (settings_mode == 'R'){
 			  readPacket();
 			  if((Rx_to_ID == source_ID) || (Rx_to_ID == broadcast_ID)){
-				  //writeKeyPacket();
 				  encryption_byte = packet_type_reply;
 				  if (!(ptrdev->RSSI_counter)){
 					  ptrdev->RSSI_Mean_Double = Rx_RSSI;
@@ -413,6 +410,11 @@ int main(void)
 
 					  // If CRC does match, set packet_type = CRC_OK & add 32bit key to 128bit key; if CRC doesn't match, set packet_type = CRC_BAD
 					  encryption_byte = packet_type_keybit_CRC_ok;
+
+					  // Transmit over USB
+					  uint8_t TxBuf[32];
+					  sprintf(TxBuf, "%lu\r\n", (unsigned long) (ptrdev->key_32bit));
+					  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
 				  }
 
 				  else if(Rx_packet_type == packet_type_audio_encrypted){
@@ -1850,7 +1852,7 @@ void readPacket(void){
 			HAL_SPI_Receive_IT(&hspi1, &Hamming, 1);
 		}
 		else if(Rx_packet_type == packet_type_keybit_chosen_CRC){
-			asm("nop");;
+			HAL_SPI_Receive_IT(&hspi1, &Hamming, 1);
 		}
 		else if (Rx_packet_type == packet_type_keybit_CRC_ok){
 			asm("nop");;
@@ -1874,27 +1876,6 @@ void readPacket(void){
 
 }
 
-
-void writeKeyPacket(void){
-	// Packet length (1byte), packet type (1byte), dest_ID, source_ID (1byte), RSSI byte (1byte)
-	uint8_t packet_total_length = 5+settings_audiosamples_length;
-
-	dest_ID = Rx_from_ID;
-
-	//SPI_PKT_WR, packet total length, packet type, ID
-	uint8_t header[] = {0x10, packet_total_length, packet_type_reply, dest_ID, source_ID};
-
-	uint8_t array[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16};
-
-	// Write data to packet RAM
-	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi1, header, 5);
-	for(int i=0; i<16; i++){
-		HAL_SPI_Transmit_IT(&hspi1, &array[i], 1);
-	}
-	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
-	ADF_set_Tx_mode();
-}
 
 void writeKeybitPacket(device *ptrdev, uint8_t keybit_type){
 	// Packet length (1byte), packet type (1byte), dest_ID, source_ID (1byte), RSSI byte (1byte)
