@@ -14,6 +14,7 @@
 "Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc.o"
 "Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc_ex.o"
 "Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.o"
+"Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_crc.o"
 "Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cryp.o"
 "Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cryp_ex.o"
 "Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dac.o"
