@@ -54,46 +54,15 @@ UART_HandleTypeDef huart5;
 
 /* USER CODE BEGIN PV */
 
-RTC_TimeTypeDef sTime;
-RTC_DateTypeDef sDate;
-
 /* Default Settings */
 char settings_mode = 'R';
 uint8_t settingsVolume = 70;					// Potentiometer for volume
-uint8_t settingsDataLength = 20;				// Databytes in audio packet
-// uint8_t settingsKeyPacketLength = 4;			// Aantal bytes voor sleutel (= #sleutelbits %8)
-uint8_t settingsResolution = 8;					// 8 or 12 (ADC resolution)
-//uint8_t settingsEncryption = 1;					// 0 = off, 1 = on
-uint32_t settings_frequency = 245000;			// Frequency in kHz
-
-/* General variables */
-uint16_t adcVal;
-uint16_t adcValDownSampled;
-
-/* Debug variables */
-uint8_t returnValue;
-uint32_t counter;
-uint32_t Packets_Received;
-uint32_t Packets_Send;
-
-//debug
-uint8_t KeyCounter;
-uint8_t KeyCounterLength = 5;
-uint8_t TxKeys[5];
-uint8_t RxKeys[5];
-uint8_t RxKeysAfterHamming[5];
-uint8_t TxRSSIValues[8];
-uint8_t TxRSSIMeanValues[8];
-uint8_t RxRSSIValues[8];
-uint8_t RxRSSIMeanValues[8];
-uint32_t TxCounterTable[8];
-uint32_t RxCounterTable[8];
 
 /* External interrupts */
 uint8_t INT_PACKET_RECEIVED = 0;
 uint8_t INT_PACKET_SENT = 0;
 
-
+/* Extra variables */
 uint8_t ADF_status;//test variable
 uint8_t HGM = 0;
 uint16_t packets_received = 0;
@@ -102,13 +71,12 @@ uint16_t packets_sent = 0;
 uint16_t packets_sent_prev = 0;
 uint32_t RSSI_prev = 0;
 
-/* Tx variables */
-cbuf_handle_t Tx_buffer_handle_t;
+/* Tranciever variables */
+uint32_t settings_frequency = 245000;			// Frequency in kHz
 uint8_t TX_BUFFER_BASE;
+uint8_t RX_BUFFER_BASE;
 
 /* Rx variables */
-cbuf_handle_t Rx_buffer_handle_t;
-uint8_t RX_BUFFER_BASE;
 uint8_t Pkt_length;
 uint8_t Pkt_type;
 uint8_t Data_length;
@@ -116,7 +84,7 @@ uint8_t Rx_Encryption_byte;
 uint8_t Rx_Dummy_byte;
 uint8_t Rx_CRC_response;
 
-/* Encryption variables */
+/* Encryption variables
 uint32_t Key_32bit_Array[4] = {0xAAAAAAAA, 0xAAAAAAAA, 0xAAAAAAAA, 0xAAAAAAAA};
 uint32_t Key_32bit = 0xAAAAAAAA;
 
@@ -127,7 +95,7 @@ uint8_t Key_32bit_Array_Index;
 
 uint32_t Old_Key_32bit;
 uint8_t Old_Key_32bit_index;
-
+*/
 
 /* Button states */
 static volatile int POWER_state = 1;
@@ -145,6 +113,7 @@ cbuf_handle_t audio_buffer_handle_t;
 uint16_t cbuf_size = 0;
 uint8_t data[settings_audiosamples_length];
 uint8_t samples[settings_audiosamples_length];
+
 
 /* USER CODE END PV */
 
@@ -301,17 +270,6 @@ int main(void)
 	  	}
 	*/
 
-	  	/*
-	  	if (settings_mode == 'T'){
-	  			  // Send audio packet
-	  			  if (circular_buf_size(Tx_buffer_handle_t) > settingsDataLength){
-	  				  if (settingsResolution == 8){
-	  					  SendPacket8bit();
-	  				  }
-	  			  }
-	  		  }
-		*/
-
 
 		// Packet received TX-side
 		if(INT_PACKET_RECEIVED){
@@ -320,12 +278,6 @@ int main(void)
 		  	// Extract Pkt_length, Pkt_type, Data_length, Data_array[Data_length] and RSSI from received package
 			RSSI = ReadPacket();
 			RSSI_counter++;
-
-		  	/*
-			// Debug: write RSSI value
-			uint32_t address0 = 0x08012000 + (16*(RSSI_counter-1));
-			Write_Flash(address0, (uint32_t) RSSI);
-			*/
 
 			// Update RSSI_Measured
 		  	RSSI_Measured[RSSI_counter] = RSSI;
@@ -383,18 +335,12 @@ int main(void)
 	  	if (INT_PACKET_SENT){
 		  	INT_PACKET_SENT = 0;
 		  	if (settings_mode == 'R'){
+		  		//MANUEEL ANTWOORD
 			  	SendDummyByte(0xAA);
 			  	ADF_set_Rx_mode();
 
 			  	// Extract Pkt_length, Pkt_type, Data_length, Data_array[Data_length] and RSSI from received package
 				RSSI = ReadPacket();
-
-
-			  	/*
-				// Debug: write RSSI value
-				uint32_t address0 = 0x08012000 + (16*(RSSI_counter-1));
-				Write_Flash(address0, (uint32_t) RSSI);
-				*/
 
 				// Update RSSI_Measured
 			  	RSSI_Measured[RSSI_counter] = RSSI;
@@ -411,7 +357,7 @@ int main(void)
 
 
 
-				if(RSSI_counter == 128){
+				if(RSSI_counter == 128){ //Waarom 128
 					RSSI_counter = 0;
 					makeGraycode(); // make e- and d-lines
 
@@ -440,7 +386,7 @@ int main(void)
 					if(settings_mode == 'R'){
 						SendDummyByte(0xAA); // Send dummy packet with type 0xFF after reception of e-line
 						ADF_set_Rx_mode();
-						// Replace e-line from RX with e-line received from TX (happens in ReadPacket with reception of 0xFF type)
+						// TODO Replace e-line from RX with e-line received from TX (happens in ReadPacket with reception of 0xFF type)
 
 						generateKeyGraycode();
 					}
@@ -1697,12 +1643,6 @@ uint8_t ReadPacket(void){
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
 	while (ADF_SPI_READY() == 0);
-
-	/*
-	// Debug
-	uint32_t address0 = 0x08012000 + (4*(RSSI_counter-1));
-	Write_Flash(address0, (uint32_t) RSSI);
-	*/
 
 	return RSSI;
 }
