@@ -63,9 +63,9 @@ uint8_t INT_PACKET_RECEIVED = 0;
 uint8_t INT_PACKET_SENT = 0;
 
 /* Extra variables */
-uint8_t ADF_status;//test variable
+uint8_t ADF_status; //handig voor debug
 uint8_t HGM = 0;
-uint16_t packets_received = 0;
+uint16_t packets_received = 0; //handig voor debug
 uint16_t packets_received_prev = 0;
 uint16_t packets_sent = 0;
 uint16_t packets_sent_prev = 0;
@@ -78,24 +78,8 @@ uint8_t RX_BUFFER_BASE;
 
 /* Rx variables */
 uint8_t Pkt_length;
-uint8_t Pkt_type;
-uint8_t Data_length;
-uint8_t Rx_Encryption_byte;
-uint8_t Rx_Dummy_byte;
-uint8_t Rx_CRC_response;
+uint8_t Pkt_type;   //handig voor debug
 
-/* Encryption variables
-uint32_t Key_32bit_Array[4] = {0xAAAAAAAA, 0xAAAAAAAA, 0xAAAAAAAA, 0xAAAAAAAA};
-uint32_t Key_32bit = 0xAAAAAAAA;
-
-uint8_t Key_chosen_wait_timer;
-
-uint32_t KeyCounter32bit;
-uint8_t Key_32bit_Array_Index;
-
-uint32_t Old_Key_32bit;
-uint8_t Old_Key_32bit_index;
-*/
 
 /* Button states */
 static volatile int POWER_state = 1;
@@ -104,15 +88,6 @@ static volatile int UP_state = 1;
 static volatile int DOWN_state = 1;
 static volatile int LEFT_state = 1;
 static volatile int RIGHT_state = 1;
-
-/* Audio */
-uint8_t adc_value = 0;
-uint16_t adc_value_downsampled = 0;
-uint32_t adc_counter = 0;
-cbuf_handle_t audio_buffer_handle_t;
-uint16_t cbuf_size = 0;
-uint8_t data[settings_audiosamples_length];
-uint8_t samples[settings_audiosamples_length];
 
 
 /* USER CODE END PV */
@@ -154,14 +129,15 @@ void makeGraycode(void);
 void SendDummyByte(uint8_t);
 void Send_e_line(void);
 
-/* Audio functions */
-void playAudio(void);
-
+/* Helper functions */
 void delay_us (uint16_t us);
 
 
 /* -------------------------------------------------------------------------------------------------------------------- */
 /* VARIABLES NEW ALGORITHM*/
+uint8_t dummy_byte;
+uint8_t send_packet;
+uint8_t send_e;
 uint8_t RSSI;
 uint8_t RSSI_counter;
 
@@ -170,7 +146,7 @@ uint8_t RSSI_Measured[128];
 uint8_t RSSI_Range[2]; // max and min values of 128 measured RSSI values (~ form key)
 
 uint8_t intervals = 8;
-uint8_t quantisation_intervals[7]; // 7 levels to determine 8 intervals between RSSImax en RSSImin //quantisation_intervals[intervals-1]
+uint8_t quantisation_intervals[7]; // 7 levels to determine 8 intervals between RSSImax en RSSImin
 
 uint8_t d0_line[128];
 uint8_t d1_line[128];
@@ -180,6 +156,7 @@ uint8_t e_line[16]; //indexed by a
 
 uint8_t keyGraycode_long[128];
 uint32_t keyGraycode[4];
+uint32_t key_counter = 0;
 /* -------------------------------------------------------------------------------------------------------------------- */
 
 
@@ -238,6 +215,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // Start PWM timers for RGB led
+  // ----------------------STAAN DEZE ZEKER GOED INGESTELD?--------------------------
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
@@ -260,138 +238,130 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   	while (1){
 
+  		/*------------CHECK ZEKER OF DE HEAP SIZE (via master.ioc, de derde tab naast clocks denk ik) = 0x600------------ (zie thesis software -> Virtuele COM-poort)*/
+  		// ook nog eens checken na compileren of het niet teruggezet werd, want had dit vaak... mogelijks moet je saven na aanpassen en code laten "hergenereren"
+
   		// Introduce artificial delay between receive from RX and send new dummy packet to RX
-  		/*//zie TIM5
+  		//-------------zie EXTI TIM2---------------
 	  	if (settings_mode == 'T'){
-	  		////////////// Bepaalde delay voor entropy
-		  	if (delay passed){ // werken met timers?
-		  		SendDummyByte(0xAA);
+		  	if(send_e & send_packet){
+		  		// er mag een nieuw pakket gestuurd worden op TX + dit pakket moet e-lijn bevatten
+		  		Send_e_line();
+		  		send_e = 0;
+		  		send_packet = 0;
+		  	}
+		  	else if (send_packet){
+		  		// er mag een nieuw pakket gestuurd worden op TX
+		  		SendDummyByte(0xDF);
+		  		send_packet = 0;
 		  	}
 	  	}
-	*/
 
-
-		// Packet received TX-side
+		// Packet received
 		if(INT_PACKET_RECEIVED){
 		  	INT_PACKET_RECEIVED = 0;
+		  	if(settings_mode = 'T'){
+		  		// Extract Pkt_length, Pkt_type, Data and RSSI from received package
+		  		RSSI = ReadPacket();
+		  		/* Check packet type (soort beveiliging voor "random" pakketten)
+		  		 	 0xDF = dummy-packet -> change to audio packet later on in development
+		  		 	 0xEF = e-line
+		  		*/
+		  		if(Pkt_type == 0xDF){ //normaal krijgt hij enkel DF (dummy als TX)
 
-		  	// Extract Pkt_length, Pkt_type, Data_length, Data_array[Data_length] and RSSI from received package
-			RSSI = ReadPacket();
-			RSSI_counter++;
+					// Update RSSI_Measured
+					RSSI_Measured[RSSI_counter] = RSSI;
 
-			// Update RSSI_Measured
-		  	RSSI_Measured[RSSI_counter] = RSSI;
+					RSSI_counter++;
 
-			// Update min and max RSSI on the fly */
-			if(RSSI < RSSI_Range[0]){
-				RSSI_Range[0] = RSSI;
-			}
-			else if(RSSI > RSSI_Range[1]){
-				RSSI_Range[1] = RSSI;
-			}
-
-
-			if(RSSI_counter == 127){
-				RSSI_counter = 0;
-				makeGraycode(); // make e- and d-lines
-
-				//reset RSSI_range //--> ["infinity", 0]
-				RSSI_Range[0] = 0XFF; //min
-				RSSI_Range[1] = 0X00; //max
-
-				if(settings_mode == 'T'){
-					Send_e_line();
-					generateKeyGraycode();
-				}
-			}
+					// Update min and max RSSI on the fly */
+					if(RSSI < RSSI_Range[0]){
+						RSSI_Range[0] = RSSI;
+					}
+					else if(RSSI > RSSI_Range[1]){
+						RSSI_Range[1] = RSSI;
+					}
 
 
-			/* Check packet type
-					// 0xAA = dummy-packet -> change to audio packet later on in development
-					// 0xFF = e-line
-			*/
-			/*
-		  	if(Pkt_type == 0xFF){
-				if(settings_mode == 'R'){
-					SendDummyByte(0xAA); // Send dummy packet with type 0xFF after reception of e-line
+					if(RSSI_counter == 128){ //als RSSI_counter = 128 ==> RSSI_Measured[127] werd ingevuld en daarna werd de counter verhoogd
+						RSSI_counter = 0;
+						makeGraycode(); // make e- and d-lines
 
-					// Replace e-line from RX with e-line received from TX (~ stored in Rx_data if packet type = 0x...)
+						//reset RSSI_range //--> ["infinity", 0]
+						//opmerking: wss zijn min en max ook omgekeerd omdat het tweecomplement is (255 ==> -127 dBm denk ik), maar vooral entropy is belangrijk dus maakt niet uit
+						RSSI_Range[0] = 0XFF; //min
+						RSSI_Range[1] = 0X00; //max
 
-					//for(int i=0; i<sizeof(e_line)/sizeof(e_line[0]); i++){
-				    //    e_line[i] = Data_array[i];
-				    //}
+						if(settings_mode == 'T'){
+							send_e = 1;
+							generateKeyGraycode();
+							key_counter++;
+							/*
+							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
+						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
+						  	uint8_t TxBuf[34];
+						  	sprintf(TxBuf, "T;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
+						  	CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+							 */
 
-					generateKeyGraycode();
-					//save/write key to flash
-					//NEEDS UPDATE
-					uint32_t address1 = 0x08011000 + (4*(KeyCounter32bit-1));
-				  	Write_Flash(address1, Key_32bit);
-				}
-			}
-			*/
-	  	}
+						}
+					}
+		  		}
+		  	}
 
-		// Packet received RX-side
+		  	else if (settings_mode == 'R'){
+				SendDummyByte(0xDF); //moet mogelijks op het einde van deze if
+				//ADF_set_Rx_mode(); // gebeurt normaal automatisch nadat een pakket gestuurd is door de ADF_set_turnaround_Tx_Rx
+
+				// Extract Pkt_length, Pkt_type, data and RSSI from received package
+				RSSI = ReadPacket();
+		  		if(Pkt_type == 0xDF || Pkt_type == 0xEF){
+		  			// Update RSSI_Measured
+					RSSI_Measured[RSSI_counter] = RSSI;
+
+					RSSI_counter++;
+
+					// Update min and max RSSI on the fly */
+					if(RSSI < RSSI_Range[0]){
+						RSSI_Range[0] = RSSI;
+					}
+					else if(RSSI > RSSI_Range[1]){
+						RSSI_Range[1] = RSSI;
+					}
+
+					if(RSSI_counter == 128){ //als RSSI_counter = 128 ==> RSSI_Measured[127] werd ingevuld en daarna werd de counter verhoogd
+						RSSI_counter = 0;
+						makeGraycode(); // make e- and d-lines
+
+						//reset RSSI_range //--> ["infinity", 0]
+						RSSI_Range[0] = 0XFF; //min
+						RSSI_Range[1] = 0X00; //max
+
+						/* Check packet type
+							// 0xDF = dummy-packet -> change to audio packet later on in development
+							// 0xEF = e-line
+						*/
+					}
+					if(Pkt_type == 0xEF){
+						if(RSSI_counter == 0){ //zie ppt dia 22
+							//e-line replacement happens in readPacket (e-line from TX is directly read in this array)
+							generateKeyGraycode();
+							key_counter++;
+							/*
+							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
+							//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
+							uint8_t TxBuf[34];
+							sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
+							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+							 */
+						}
+					}
+		  		}
+		  	}
+		}
+
 	  	if (INT_PACKET_SENT){
 		  	INT_PACKET_SENT = 0;
-		  	if (settings_mode == 'R'){
-		  		//MANUEEL ANTWOORD
-			  	SendDummyByte(0xAA);
-			  	ADF_set_Rx_mode();
-
-			  	// Extract Pkt_length, Pkt_type, Data_length, Data_array[Data_length] and RSSI from received package
-				RSSI = ReadPacket();
-
-				// Update RSSI_Measured
-			  	RSSI_Measured[RSSI_counter] = RSSI;
-
-				RSSI_counter++;
-
-				// Update min and max RSSI on the fly */
-				if(RSSI < RSSI_Range[0]){
-					RSSI_Range[0] = RSSI;
-				}
-				else if(RSSI > RSSI_Range[1]){
-					RSSI_Range[1] = RSSI;
-				}
-
-
-
-				if(RSSI_counter == 128){ //Waarom 128
-					RSSI_counter = 0;
-					makeGraycode(); // make e- and d-lines
-
-					//reset RSSI_range //--> ["infinity", 0]
-					RSSI_Range[0] = 0XFF; //min
-					RSSI_Range[1] = 0X00; //max
-
-					/*
-					if(settings_mode == 'T'){
-						Send_e_line();
-						generateKeyGraycode();
-						//save/write key to flash
-						//NEEDS UPDATE
-						uint32_t address1 = 0x08011000 + (4*(KeyCounter32bit-1));
-					  	Write_Flash(address1, Key_32bit);
-					}
-					*/
-				}
-
-
-				/* Check packet type
-						// 0xAA = dummy-packet -> change to audio packet later on in development
-						// 0xFF = e-line
-				*/
-			  	if(Pkt_type == 0xFF){
-					if(settings_mode == 'R'){
-						SendDummyByte(0xAA); // Send dummy packet with type 0xFF after reception of e-line
-						ADF_set_Rx_mode();
-						// TODO Replace e-line from RX with e-line received from TX (happens in ReadPacket with reception of 0xFF type)
-
-						generateKeyGraycode();
-					}
-				}
-		  	}
 	  	}
     /* USER CODE END WHILE */
 
@@ -1279,9 +1249,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
 /* Callback timers */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-	// Play audio samples on DAC
 	if (htim->Instance == TIM2){
-		playAudio();
+		// verander TIM2 zodat frequentie = +-166 Hz (elke 6 ms pakket)
+		// moet aangepast kunnen worden naar +-333 Hz (elke 3 ms), +-93 Hz (elke 12 ms), +-41 ms (elke 24 ms)
+		// als we snel pakketten sturen, werkt het algoritme wss minder goed en genereert deze sleutels met ZEER slechte entropie
+		// hoe trager we gaan sturen, zou het hopelijk een hogere entropy moeten hebben
+		send_packet = 1;
 	}
 
 	// Timer for external interrupts (buttons)
@@ -1339,9 +1312,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 			//ADD FUNCTIONALITY
 
-			// Debug
-			//test_transmitDummyPacket();
-
 			DOWN_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
 		}
@@ -1350,11 +1320,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		if (HAL_GPIO_ReadPin(BTN_LEFT_GPIO_Port, BTN_LEFT_Pin)){
 
 			//ADD FUNCTIONALITY
-
-			// Debug
-			//uint8_t ret;
-			//ret = ADF_status_word();
-			asm("nop");
 
 			LEFT_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
@@ -1379,7 +1344,6 @@ void makeGraycode(void){
 	for(int i = 0; i < sizeof(quantisation_intervals)/sizeof(quantisation_intervals[0]); i++){
 		quantisation_intervals[i] = RSSI_Range[0] + i*intervalWidth;
 	}
-
 
 	// Set up Gray code
 	uint8_t a = 15;
@@ -1427,7 +1391,7 @@ void generateKeyGraycode(void){
 			b -=1;
 		}
 
-		/* sleutel is wel omgekeerd maar maakt niet zoveel uit */
+		/* sleutel is wel "omgekeerd" (~LSB-first?) maar maakt niet zoveel uit, kunnen we in excel desnoods ez omdraaien. Het belangrijkste is de sleutelentropy*/
 		if((e_line[a] >> (i%8)) & 1){
 			if(d1_line[i] == 0x01){
 				keyGraycode[b] |= (1UL << (i%32)); //setting bit
@@ -1448,27 +1412,40 @@ void generateKeyGraycode(void){
 }
 
 
+void startup(void){
+	// Clear PWR wake up Flag
+	HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
+	__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
+	__HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB);
+
+	// Setup registers for transceiver
+	ADF_Init(settings_frequency);
+
+	// Shutdown Class D audio amplifier
+	HAL_GPIO_WritePin(CLASS_D_SHDN_GPIO_Port, CLASS_D_SHDN_Pin, GPIO_PIN_RESET); //GPIO_PIN_RESET
+	// Shutdown microphone preamplifier
+	HAL_GPIO_WritePin(MIC_SHDN_GPIO_Port, MIC_SHDN_Pin, GPIO_PIN_RESET);
+
+	HAL_Delay(500);
+
+	ADF_set_turnaround_Tx_Rx();
+
+	// Setup for MCU
+	setup();
+}
 
 void setup(){
-	// Reset buffer
-	circular_buf_reset(audio_buffer_handle_t);
-
 	switch(settings_mode){
 		case 'T':
 			LED_RGB_status(0, 10, 0);
 
 			// Stop the DAC interface and timer2 (8 kHz)
-			HAL_DAC_Stop(&hdac, DAC_CHANNEL_1);
+			//HAL_DAC_Stop(&hdac, DAC_CHANNEL_1);
 			HAL_TIM_Base_Stop_IT(&htim2);
 
-			// Shutdown Class D audio amplifier
-			HAL_GPIO_WritePin(CLASS_D_SHDN_GPIO_Port, CLASS_D_SHDN_Pin, GPIO_PIN_RESET); //GPIO_PIN_RESET
-			// Enable microphone preamplifier
-			HAL_GPIO_WritePin(MIC_SHDN_GPIO_Port, MIC_SHDN_Pin, GPIO_PIN_SET);
-
 			// Start timer5 (16 kHz) and ADC interrupt triggered by TIM5
-			HAL_TIM_OC_Start(&htim5, TIM_CHANNEL_1);
-			HAL_ADC_Start_IT(&hadc1);
+			//HAL_TIM_OC_Start(&htim5, TIM_CHANNEL_1);
+			//HAL_ADC_Start_IT(&hadc1);
 
 			//HAL_TIM_Base_Start_IT(&htim9);
 
@@ -1479,68 +1456,15 @@ void setup(){
 
 			// Stop timer5 (16 kHz) and ADC interrupt triggered by TIM5
 			HAL_TIM_OC_Stop(&htim5, TIM_CHANNEL_1);
-			HAL_ADC_Stop_IT(&hadc1);
-
-			// Shutdown microphone preamplifier
-			HAL_GPIO_WritePin(MIC_SHDN_GPIO_Port, MIC_SHDN_Pin, GPIO_PIN_RESET);
-			// Enable Class D audio amplifier
-			HAL_GPIO_WritePin(CLASS_D_SHDN_GPIO_Port, CLASS_D_SHDN_Pin, GPIO_PIN_SET);
+			//HAL_ADC_Stop_IT(&hadc1);
 
 			// Start the DAC interface and timer2 (8 kHz)
-			HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
-			HAL_TIM_Base_Start_IT(&htim2);
+			//HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
+			//HAL_TIM_Base_Start_IT(&htim2);
 
-			while(ADF_RC_READY()==0);
 			ADF_set_Rx_mode();
 			break;
 	}
-
-}
-
-
-void SendDummyByte(uint8_t pkt_type){
-	uint8_t PacketTotalLength = 6; // Packet type byte, Audio packet length byte, RSSI byte, SQI byte
-
-	/*
-	PACKET-STRUCTURE:
-	[TOTALPACKETLENGTH --- PACKETTYPE --- DATALENGTH --- D___A___T___A --- RSSI --- SQI]
-	*/
-
-	uint8_t header[] = {0x10, PacketTotalLength, pkt_type, 0x01}; /*SPI_PKT_WR-command, TOTALPACKETLENGTH, packettype, packet length(= 0x01 byte)*/
-
-	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi2, header, 4);
-
-	//write dummy data byte
-	uint8_t sample[1] = {0x00};
-	HAL_SPI_Transmit_IT(&hspi2, sample, 1);
-
-	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
-
-	ADF_set_Tx_mode();
-}
-
-
-void startup(void){
-	// Clear PWR wake up Flag
-	HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);
-	__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
-	__HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB);
-
-	// Setup registers for transceiver
-	ADF_Init(settings_frequency);
-
-	HAL_Delay(500);
-
-	ADF_set_turnaround_Tx_Rx();
-
-	// Make audio buffer for 400 8-bit samples
-	uint16_t buffer_size = 400;
-	uint16_t *buffer = malloc(buffer_size * sizeof(uint16_t));
-	audio_buffer_handle_t = circular_buf_init(buffer, buffer_size);
-
-	// Setup for MCU
-	setup();
 
 }
 
@@ -1570,45 +1494,42 @@ void LED_RGB_status(uint16_t red, uint16_t green, uint16_t blue){
 	htim3.Instance->CCR3 = blue;
 }
 
-void playAudio(){
-	uint16_t sample;
-	uint8_t cbuf_ret = 0;
-	cbuf_size = circular_buf_size(audio_buffer_handle_t);
-	// Check if circular buffer is filled with samples
-	if(cbuf_size){
-		cbuf_ret = circular_buf_get(audio_buffer_handle_t, &sample);
-		HAL_DAC_SetValue(&hdac, DAC1_CHANNEL_1, DAC_ALIGN_8B_R, sample);
-	}
-}
-
 void delay_us (uint16_t us){
 	__HAL_TIM_SET_COUNTER(&htim7,0);  // set the counter value a 0
 	while (__HAL_TIM_GET_COUNTER(&htim7) < us);  // wait for the counter to reach the us input in the parameter
 }
 
+void SendDummyByte(uint8_t pkt_type){
+	uint8_t packet_length = 4; // Packet length (1byte), Packet type (1byte), dummy byte [0xAB] (1byte), RSSI byte (1byte)
+
+	uint8_t header[] = {0x10, packet_length, pkt_type, dummy_byte = 0xAB};
+
+	// Write packet to RAM
+	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
+	HAL_SPI_Transmit_IT(&hspi2, header, sizeof(header)/sizeof(header[0]));
+	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
+
+	// Set RC to TX
+	ADF_set_Tx_mode();
+}
 
 void Send_e_line(void){
-	uint8_t PacketTotalLength = 16 + 4; // Packet type byte, Audio packet length byte, RSSI byte, SQI byte
+	uint8_t packet_length = 3 + 16; // Packet length, Packet type, E_L_I_N_E (16 bytes), RSSI byte
 
-	/*
-	PACKET-STRUCTURE:
-	[TOTALPACKETLENGTH --- PACKETTYPE --- DATALENGTH --- e___L___i___n___e --- RSSI --- SQI]
-	*/
+	uint8_t header[] = {0x10, packet_length, 0xEF}; /*SPI_PKT_WR-command, TOTALPACKETLENGTH, packettype, packet length(= 0x10 = 16 byte)*/
 
-	uint8_t header[] = {0x10, PacketTotalLength, 0xAA, 0x10}; /*SPI_PKT_WR-command, TOTALPACKETLENGTH, packettype, packet length(= 0x10 = 16 byte)*/
-
+	// Write packet to RAM
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi2, header, 4);
-
+	HAL_SPI_Transmit_IT(&hspi2, header, sizeof(header)/sizeof(header[0]));
 	// Write e-line bytes
 	uint8_t sample[1];
-	for (int i=0; i<sizeof(e_line)/sizeof(e_line[0]); i++)		{
+	for (int i = 0; i<sizeof(e_line)/sizeof(e_line[0]); i++){
 		sample[0]=e_line[i];
 		HAL_SPI_Transmit_IT(&hspi2, sample, 1);
 	}
-
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
+	// Set RC to TX
 	ADF_set_Tx_mode();
 }
 
@@ -1625,26 +1546,25 @@ uint8_t ReadPacket(void){
 
 	HAL_SPI_Receive_IT(&hspi2, &Pkt_length, 1);
 	HAL_SPI_Receive_IT(&hspi2, &Pkt_type, 1);
-	HAL_SPI_Receive_IT(&hspi2, &Data_length, 1);
 
-	if(Pkt_type == 0xFF){ //received e-line from TX
-		if(Data_length == 16){
-			HAL_SPI_Receive_IT(&hspi2, e_line, Data_length);
-		}
+
+	if(Pkt_type == 0xEF){
+		// e-line from TX
+		HAL_SPI_Receive_IT(&hspi2, e_line, 16);
+		HAL_SPI_Receive_IT(&hspi2, &RSSI, 1);
 	}
-	else{
-		uint8_t Data_array[Data_length];
-		HAL_SPI_Receive_IT(&hspi2, Data_array, Data_length);
+	else if(Pkt_type == 0xDF){
+		// dummy packet from RX
+		HAL_SPI_Receive_IT(&hspi2, &dummy_byte, 1);
+		HAL_SPI_Receive_IT(&hspi2, &RSSI, 1);
 	}
-
-
-	HAL_SPI_Receive_IT(&hspi2, &RSSI, 1);
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
-
 	while (ADF_SPI_READY() == 0);
 
-	return RSSI;
+
+	//opmerking: misschien een veiligheid inbouwen mocht je terug vaak random pakketten krijgen?
+	return RSSI; //RSSI vaak tussen 150 en 250
 }
 
 /* USER CODE END 4 */
