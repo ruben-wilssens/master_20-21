@@ -8,6 +8,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <math.h>
+#include <ssh1106.h>
 #include "usbd_cdc_if.h"
 #include "CBUF.h"
 #include "string.h"
@@ -60,9 +61,9 @@ RTC_DateTypeDef sDate;
 char settings_mode = 'R';
 uint8_t settingsVolume = 70;					// Potentiometer for volume
 uint8_t settingsDataLength = 20;				// Databytes in audio packet
-uint8_t settingsKeyPacketLength = 4;			// Aantal bytes voor sleutel (= #sleutelbits %8)
+// uint8_t settingsKeyPacketLength = 4;			// Aantal bytes voor sleutel (= #sleutelbits %8)
 uint8_t settingsResolution = 8;					// 8 or 12 (ADC resolution)
-uint8_t settingsEncryption = 1;					// 0 = off, 1 = on
+//uint8_t settingsEncryption = 1;					// 0 = off, 1 = on
 uint32_t settings_frequency = 245000;			// Frequency in kHz
 
 /* General variables */
@@ -267,7 +268,22 @@ int main(void)
   MX_CRYP_Init();
   /* USER CODE BEGIN 2 */
 
+  // Start PWM timers for RGB led
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+
+  LED_RGB_status(0, 0, 35);
+
   startup();
+
+  ssh1106_Init();  // initialise
+  ssh1106_SetCursor(10,10);
+  ssh1106_WriteString ("Algoritme 2", Font_7x10, White);
+  ssh1106_SetCursor(10, 30);
+  ssh1106_WriteString ("Debugging", Font_7x10, White);
+  ssh1106_UpdateScreen(); //display
+  ssh1106_SetDisplayOn(1);
 
   /* USER CODE END 2 */
 
