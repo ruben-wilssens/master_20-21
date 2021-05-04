@@ -56,7 +56,6 @@ UART_HandleTypeDef huart5;
 
 /* Default Settings */
 char settings_mode = 'R';
-uint8_t settingsVolume = 70;					// Potentiometer for volume
 
 /* External interrupts */
 uint8_t INT_PACKET_RECEIVED = 0;
@@ -112,6 +111,7 @@ static void MX_TIM9_Init(void);
 static void MX_CRYP_Init(void);
 /* USER CODE BEGIN PFP */
 
+/* Interrupt functions */
 void HAL_GPIO_EXTI_Callback(uint16_t);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *);
 
@@ -119,7 +119,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *);
 void startup(void);
 void setup(void);
 
-void potmeterInit(uint8_t);
 void LED_RGB_status(uint16_t , uint16_t , uint16_t );
 
 /* Gray functions */
@@ -142,7 +141,7 @@ uint8_t RSSI;
 uint8_t RSSI_counter;
 
 uint8_t RSSI_Measured[128];
-// constantly checked if newly read RSSI value is not new min or new max
+// Constantly checked if newly read RSSI value is not new min or new max
 uint8_t RSSI_Range[2]; // max and min values of 128 measured RSSI values (~ form key)
 
 uint8_t intervals = 8;
@@ -215,7 +214,6 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // Start PWM timers for RGB led
-  // ----------------------STAAN DEZE ZEKER GOED INGESTELD?--------------------------
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
@@ -232,17 +230,18 @@ int main(void)
   ssh1106_UpdateScreen(); //display
   ssh1106_SetDisplayOn(1);
 
+  /* Start transmit timer */
+  HAL_TIM_Base_Start_IT(&htim2);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  	while (1){
-
-  		/*------------CHECK ZEKER OF DE HEAP SIZE (via master.ioc, de derde tab naast clocks denk ik) = 0x600------------ (zie thesis software -> Virtuele COM-poort)*/
-  		// ook nog eens checken na compileren of het niet teruggezet werd, want had dit vaak... mogelijks moet je saven na aanpassen en code laten "hergenereren"
+  	while(1){
 
   		// Introduce artificial delay between receive from RX and send new dummy packet to RX
   		//-------------zie EXTI TIM2---------------
+
 	  	if (settings_mode == 'T'){
 		  	if(send_e & send_packet){
 		  		// er mag een nieuw pakket gestuurd worden op TX + dit pakket moet e-lijn bevatten
@@ -260,7 +259,7 @@ int main(void)
 		// Packet received
 		if(INT_PACKET_RECEIVED){
 		  	INT_PACKET_RECEIVED = 0;
-		  	if(settings_mode = 'T'){
+		  	if(settings_mode == 'T'){
 		  		// Extract Pkt_length, Pkt_type, Data and RSSI from received package
 		  		RSSI = ReadPacket();
 		  		/* Check packet type (soort beveiliging voor "random" pakketten)
@@ -808,9 +807,9 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
+  htim2.Init.Prescaler = 84-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 10500-1;
+  htim2.Init.Period = 6000-1;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -1466,15 +1465,6 @@ void setup(){
 			break;
 	}
 
-}
-
-
-void potmeterInit(uint8_t volume){
-	uint8_t value[1];
-	value[0]= volume;
-	HAL_GPIO_WritePin(DPOT_CS_GPIO_Port, DPOT_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi2, value, 1, 50);
-	HAL_GPIO_WritePin(DPOT_CS_GPIO_Port, DPOT_CS_Pin, GPIO_PIN_SET);
 }
 
 
