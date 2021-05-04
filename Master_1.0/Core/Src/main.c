@@ -230,15 +230,11 @@ int main(void)
   ssh1106_UpdateScreen(); //display
   ssh1106_SetDisplayOn(1);
 
-  /* Start transmit timer */
-  HAL_TIM_Base_Start_IT(&htim2);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   	while(1){
-
   		// Introduce artificial delay between receive from RX and send new dummy packet to RX
   		//-------------zie EXTI TIM2---------------
 
@@ -298,9 +294,10 @@ int main(void)
 							/*
 							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
-						  	uint8_t TxBuf[34];
-						  	sprintf(TxBuf, "T;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
-						  	CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+						  	keygraycode
+							uint8_t TxBuf[34];
+							sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (testkey));
+							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
 							 */
 
 						}
@@ -347,7 +344,7 @@ int main(void)
 							generateKeyGraycode();
 							key_counter++;
 							/*
-							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
+							//Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 							//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
 							uint8_t TxBuf[34];
 							sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
@@ -809,7 +806,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 84-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 6000-1;
+  htim2.Init.Period = 5000-1;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
