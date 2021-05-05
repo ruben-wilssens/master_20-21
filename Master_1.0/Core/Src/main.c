@@ -240,7 +240,7 @@ int main(void)
   	while(1){
 
   		// Introduce artificial delay between receive from RX and send new dummy packet to RX
-  		//-------------zie EXTI TIM2---------------
+  		// !!!! TX is now transmitting every 5ms mogelijks niet deftig naar RX aan het gaan? !!!!
 
 	  	if (settings_mode == 'T'){
 		  	if(send_e & send_packet){
@@ -260,12 +260,15 @@ int main(void)
 		if(INT_PACKET_RECEIVED){
 		  	INT_PACKET_RECEIVED = 0;
 		  	if(settings_mode == 'T'){
-		  		// Extract Pkt_length, Pkt_type, Data and RSSI from received package
-		  		RSSI = ReadPacket();
+
+		  		ADF_set_Rx_mode();
+		  		RSSI = ReadPacket(); // Extract Pkt_length, Pkt_type, Data and RSSI from received package
+
 		  		/* Check packet type (soort beveiliging voor "random" pakketten)
 		  		 	 0xDF = dummy-packet -> change to audio packet later on in development
 		  		 	 0xEF = e-line
 		  		*/
+
 		  		if(Pkt_type == 0xDF){ //normaal krijgt hij enkel DF (dummy als TX)
 
 					// Update RSSI_Measured
@@ -288,6 +291,7 @@ int main(void)
 
 						//reset RSSI_range //--> ["infinity", 0]
 						//opmerking: wss zijn min en max ook omgekeerd omdat het tweecomplement is (255 ==> -127 dBm denk ik), maar vooral entropy is belangrijk dus maakt niet uit
+
 						RSSI_Range[0] = 0XFF; //min
 						RSSI_Range[1] = 0X00; //max
 
@@ -311,12 +315,12 @@ int main(void)
 
 		  	else if (settings_mode == 'R'){
 
-				//ADF_set_Rx_mode(); // gebeurt normaal automatisch nadat een pakket gestuurd is door de ADF_set_turnaround_Tx_Rx
+				ADF_set_Rx_mode(); // gebeurt normaal automatisch nadat een pakket gestuurd is door de ADF_set_turnaround_Tx_Rx !!!! Nakijken
+				RSSI = ReadPacket(); // Extract Pkt_length, Pkt_type, data and RSSI from received package
+				HAL_Delay(1);
 
-				// Extract Pkt_length, Pkt_type, data and RSSI from received package
-				RSSI = ReadPacket();
 		  		if(Pkt_type == 0xDF || Pkt_type == 0xEF){
-		  			SendDummyByte(0xDF); //moet mogelijks op het einde van deze if
+		  			SendDummyByte(0xDF); // Enkel antwoorden na filter
 		  			// Update RSSI_Measured
 					RSSI_Measured[RSSI_counter] = RSSI;
 
@@ -1201,7 +1205,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		case ADF7242_IRQ2_Pin:
 			INT_PACKET_RECEIVED = 1;
 			packets_received++;
-			delay_us(6);
+			delay_us(10);
 			ADF_clear_Rx_flag();
 			break;
 
