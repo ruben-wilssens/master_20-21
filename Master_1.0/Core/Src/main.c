@@ -301,13 +301,18 @@ int main(void)
 							key_counter++;
 							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
-
-							for(int i=0; i<4; i++){
-						  		uint8_t TxBuf[34];
-						  		sprintf(TxBuf, "R;%lu\r\n", keyGraycode[i]);
+							uint8_t TxBuf[34];
+							sprintf(TxBuf, "K:%lu;", keyGraycode[0]);
+							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+							HAL_Delay(200);
+							for(int i=1; i<3; i++){
+						  		sprintf(TxBuf, "%lu;", keyGraycode[i]);
 						  		CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
 						  		HAL_Delay(200);
 						  	}
+							sprintf(TxBuf, "%lu\r\n", keyGraycode[0]);
+							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+							HAL_Delay(200);
 
 						}
 					}
@@ -353,13 +358,20 @@ int main(void)
 							//e-line replacement happens in readPacket (e-line from TX is directly read in this array)
 							generateKeyGraycode();
 							key_counter++;
-							/*
-							//Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
-							//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
+							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
+						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
 							uint8_t TxBuf[34];
-							sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
+							sprintf(TxBuf, "K:%lu;", keyGraycode[0]);
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-							 */
+							HAL_Delay(200);
+							for(int i=1; i<3; i++){
+						  		sprintf(TxBuf, "%lu;", keyGraycode[i]);
+						  		CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+						  		HAL_Delay(200);
+						  	}
+							sprintf(TxBuf, "%lu\r\n", keyGraycode[0]);
+							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+							HAL_Delay(200);
 						//}
 					}
 		  		}
