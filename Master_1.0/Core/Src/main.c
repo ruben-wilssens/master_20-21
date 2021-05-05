@@ -316,6 +316,7 @@ int main(void)
 				// Extract Pkt_length, Pkt_type, data and RSSI from received package
 				RSSI = ReadPacket();
 		  		if(Pkt_type == 0xDF || Pkt_type == 0xEF){
+		  			SendDummyByte(0xDF); //moet mogelijks op het einde van deze if
 		  			// Update RSSI_Measured
 					RSSI_Measured[RSSI_counter] = RSSI;
 
@@ -357,7 +358,7 @@ int main(void)
 						}
 					}
 		  		}
-		  		SendDummyByte(0xDF); //moet mogelijks op het einde van deze if
+
 		  	}
 		}
 
@@ -1439,9 +1440,6 @@ void setup(){
 	switch(settings_mode){
 		case 'T':
 			LED_RGB_status(0, 10, 0);
-			ssh1106_SetCursor(10, 30);
-			ssh1106_WriteString ("Transmitting", Font_7x10, White);
-			ssh1106_UpdateScreen();
 
 			// Stop the DAC interface and timer2 (8 kHz)
 			//HAL_DAC_Stop(&hdac, DAC_CHANNEL_1);
@@ -1464,9 +1462,6 @@ void setup(){
 			// Stop timer5 (16 kHz) and ADC interrupt triggered by TIM5
 			HAL_TIM_OC_Stop(&htim5, TIM_CHANNEL_1);
 			//HAL_ADC_Stop_IT(&hadc1);
-			ssh1106_SetCursor(10, 30);
-			ssh1106_WriteString ("Receiving", Font_7x10, White);
-			ssh1106_UpdateScreen();
 
 			/* Start transmit timer */
 			HAL_TIM_Base_Stop_IT(&htim2);
@@ -1510,15 +1505,12 @@ void SendDummyByte(uint8_t pkt_type){
 
 	// Write packet to RAM
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi2, header, sizeof(header)/sizeof(header[0]));
+	HAL_SPI_Transmit_IT(&hspi1, header, sizeof(header)/sizeof(header[0]));
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
 	// Set RC to TX
 	ADF_set_Tx_mode();
 
-	ssh1106_SetCursor(10, 50);
-	ssh1106_WriteString ("Dummy Verstuurd", Font_7x10, White);
-	ssh1106_UpdateScreen();
 }
 
 void Send_e_line(void){
@@ -1528,12 +1520,12 @@ void Send_e_line(void){
 
 	// Write packet to RAM
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit_IT(&hspi2, header, sizeof(header)/sizeof(header[0]));
+	HAL_SPI_Transmit_IT(&hspi1, header, sizeof(header)/sizeof(header[0]));
 	// Write e-line bytes
 	uint8_t sample[1];
 	for (int i = 0; i<sizeof(e_line)/sizeof(e_line[0]); i++){
 		sample[0]=e_line[i];
-		HAL_SPI_Transmit_IT(&hspi2, sample, 1);
+		HAL_SPI_Transmit_IT(&hspi1, sample, 1);
 	}
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 
@@ -1550,21 +1542,21 @@ uint8_t ReadPacket(void){
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 
 	// Send commands to ADF7242 that we want to read received packet
-	HAL_SPI_Transmit_IT(&hspi2, bytes, 2);
+	HAL_SPI_Transmit_IT(&hspi1, bytes, 2);
 
-	HAL_SPI_Receive_IT(&hspi2, &Pkt_length, 1);
-	HAL_SPI_Receive_IT(&hspi2, &Pkt_type, 1);
+	HAL_SPI_Receive_IT(&hspi1, &Pkt_length, 1);
+	HAL_SPI_Receive_IT(&hspi1, &Pkt_type, 1);
 
 
 	if(Pkt_type == 0xEF){
 		// e-line from TX
-		HAL_SPI_Receive_IT(&hspi2, e_line, 16);
-		HAL_SPI_Receive_IT(&hspi2, &RSSI, 1);
+		HAL_SPI_Receive_IT(&hspi1, e_line, 16);
+		HAL_SPI_Receive_IT(&hspi1, &RSSI, 1);
 	}
 	else if(Pkt_type == 0xDF){
 		// dummy packet from RX
-		HAL_SPI_Receive_IT(&hspi2, &dummy_byte, 1);
-		HAL_SPI_Receive_IT(&hspi2, &RSSI, 1);
+		HAL_SPI_Receive_IT(&hspi1, &dummy_byte, 1);
+		HAL_SPI_Receive_IT(&hspi1, &RSSI, 1);
 	}
 
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
