@@ -213,21 +213,24 @@ int main(void)
   MX_CRYP_Init();
   /* USER CODE BEGIN 2 */
 
-  // Start PWM timers for RGB led
+  /* Start PWM timers for RGB led */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+
+  /* delay_us timer start */
+  HAL_TIM_Base_Start(&htim7);
 
   LED_RGB_status(0, 0, 35);
 
   startup();
 
-  ssh1106_Init();  // initialise
+  ssh1106_Init();  // Initialise OLED
   ssh1106_SetCursor(10,10);
   ssh1106_WriteString ("Algoritme 2", Font_7x10, White);
   ssh1106_SetCursor(10, 30);
   ssh1106_WriteString ("Debugging", Font_7x10, White);
-  ssh1106_UpdateScreen(); //display
+  ssh1106_UpdateScreen();
   ssh1106_SetDisplayOn(1);
 
   /* USER CODE END 2 */
@@ -235,6 +238,7 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   	while(1){
+
   		// Introduce artificial delay between receive from RX and send new dummy packet to RX
   		//-------------zie EXTI TIM2---------------
 
@@ -291,14 +295,14 @@ int main(void)
 							send_e = 1;
 							generateKeyGraycode();
 							key_counter++;
-							/*
 							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
-						  	keygraycode
-							uint8_t TxBuf[34];
-							sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (testkey));
-							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-							 */
+						  	for(int i=0; i<3; i++){
+						  		uint8_t TxBuf[34];
+						  		sprintf(TxBuf, "R;%lu\r\n", keyGraycode[i]);
+						  		CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+						  		HAL_Delay(200);
+						  	}
 
 						}
 					}
@@ -306,7 +310,7 @@ int main(void)
 		  	}
 
 		  	else if (settings_mode == 'R'){
-				SendDummyByte(0xDF); //moet mogelijks op het einde van deze if
+
 				//ADF_set_Rx_mode(); // gebeurt normaal automatisch nadat een pakket gestuurd is door de ADF_set_turnaround_Tx_Rx
 
 				// Extract Pkt_length, Pkt_type, data and RSSI from received package
@@ -353,6 +357,7 @@ int main(void)
 						}
 					}
 		  		}
+		  		SendDummyByte(0xDF); //moet mogelijks op het einde van deze if
 		  	}
 		}
 
@@ -1434,10 +1439,16 @@ void setup(){
 	switch(settings_mode){
 		case 'T':
 			LED_RGB_status(0, 10, 0);
+			ssh1106_SetCursor(10, 30);
+			ssh1106_WriteString ("Transmitting", Font_7x10, White);
+			ssh1106_UpdateScreen();
 
 			// Stop the DAC interface and timer2 (8 kHz)
 			//HAL_DAC_Stop(&hdac, DAC_CHANNEL_1);
-			HAL_TIM_Base_Stop_IT(&htim2);
+
+			/* Start transmit timer */
+			HAL_TIM_Base_Start_IT(&htim2);
+
 
 			// Start timer5 (16 kHz) and ADC interrupt triggered by TIM5
 			//HAL_TIM_OC_Start(&htim5, TIM_CHANNEL_1);
@@ -1453,6 +1464,12 @@ void setup(){
 			// Stop timer5 (16 kHz) and ADC interrupt triggered by TIM5
 			HAL_TIM_OC_Stop(&htim5, TIM_CHANNEL_1);
 			//HAL_ADC_Stop_IT(&hadc1);
+			ssh1106_SetCursor(10, 30);
+			ssh1106_WriteString ("Receiving", Font_7x10, White);
+			ssh1106_UpdateScreen();
+
+			/* Start transmit timer */
+			HAL_TIM_Base_Stop_IT(&htim2);
 
 			// Start the DAC interface and timer2 (8 kHz)
 			//HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
@@ -1498,6 +1515,10 @@ void SendDummyByte(uint8_t pkt_type){
 
 	// Set RC to TX
 	ADF_set_Tx_mode();
+
+	ssh1106_SetCursor(10, 50);
+	ssh1106_WriteString ("Dummy Verstuurd", Font_7x10, White);
+	ssh1106_UpdateScreen();
 }
 
 void Send_e_line(void){
