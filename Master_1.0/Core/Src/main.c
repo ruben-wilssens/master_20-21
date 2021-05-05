@@ -301,7 +301,8 @@ int main(void)
 							key_counter++;
 							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
-						  	for(int i=0; i<3; i++){
+
+							for(int i=0; i<4; i++){
 						  		uint8_t TxBuf[34];
 						  		sprintf(TxBuf, "R;%lu\r\n", keyGraycode[i]);
 						  		CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
@@ -348,7 +349,7 @@ int main(void)
 						*/
 					}
 					if(Pkt_type == 0xEF){
-						if(RSSI_counter == 0){ //zie ppt dia 22
+						//if(RSSI_counter == 0){ //zie ppt dia 22
 							//e-line replacement happens in readPacket (e-line from TX is directly read in this array)
 							generateKeyGraycode();
 							key_counter++;
@@ -359,7 +360,7 @@ int main(void)
 							sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
 							 */
-						}
+						//}
 					}
 		  		}
 
@@ -1502,10 +1503,10 @@ void delay_us (uint16_t us){
 	while (__HAL_TIM_GET_COUNTER(&htim7) < us);  // wait for the counter to reach the us input in the parameter
 }
 
-void SendDummyByte(uint8_t pkt_type){
-	uint8_t packet_length = 4; // Packet length (1byte), Packet type (1byte), dummy byte [0xAB] (1byte), RSSI byte (1byte)
+void SendDummyByte(uint8_t type){
+	uint8_t packet_length = 5; // Packet length (1byte), Packet type (1byte), dummy byte [0xAB] (1byte), RSSI byte (1byte)
 
-	uint8_t header[] = {0x10, packet_length, pkt_type, dummy_byte = 0xAB};
+	uint8_t header[] = {0x10, packet_length, type, 0x01, 0x02};
 
 	// Write packet to RAM
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
@@ -1514,7 +1515,7 @@ void SendDummyByte(uint8_t pkt_type){
 
 	// Set RC to TX
 	ADF_set_Tx_mode();
-
+	while(ADF_SPI_READY()==0);
 }
 
 void Send_e_line(void){
@@ -1543,6 +1544,8 @@ uint8_t ReadPacket(void){
 	/* SPI_PKT_RD-command, SPI_NOP (use for dummy writes)*/
 	uint8_t bytes[] = {0x30, 0xff};
 
+	while (ADF_SPI_READY() == 0);
+
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_RESET);
 
 	// Send commands to ADF7242 that we want to read received packet
@@ -1559,6 +1562,7 @@ uint8_t ReadPacket(void){
 	}
 	else if(Pkt_type == 0xDF){
 		// dummy packet from RX
+		HAL_SPI_Receive_IT(&hspi1, &dummy_byte, 1);
 		HAL_SPI_Receive_IT(&hspi1, &dummy_byte, 1);
 		HAL_SPI_Receive_IT(&hspi1, &RSSI, 1);
 	}
