@@ -33,6 +33,7 @@ SCL       |PB6        |I2C Serial Clock
 /* Defines -------------------------------------------------------------------*/
 
 /* Functions -----------------------------------------------------------------*/
+void OLED(void);
 void OLED_init(void);
 void OLED_clear_screen(void);
 void OLED_update(void);

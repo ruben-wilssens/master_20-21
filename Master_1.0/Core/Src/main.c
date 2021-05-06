@@ -153,6 +153,11 @@ uint8_t transmit_voice_key = 0;
 const uint32_t voice_key_device[4] 	= {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C};
 uint32_t voice_key[4] 				= {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C};
 
+/* ---OLED Variabels--- */
+uint8_t LBO = 1;
+uint8_t menu = 0;
+uint8_t update_oled = 0;
+
 /* ---Packet settings--- */
 const uint8_t packet_type_audio = 0xFE;
 const uint8_t packet_type_audio_encrypted = 0xFF;
@@ -200,6 +205,7 @@ static volatile int DOWN_state = 1;
 static volatile int LEFT_state = 1;
 static volatile int RIGHT_state = 1;
 uint8_t testvar = 0;
+
 
 /* ---Audio--- */
 uint8_t adc_value = 0;
@@ -333,7 +339,7 @@ int main(void)
   digipotInit(settings_volume);
 
   // OLED interrupt TIM9 (1s)
-  HAL_TIM_Base_Start_IT(&htim9);
+  // HAL_TIM_Base_Start_IT(&htim9);
 
   // USB VCP variables
   int8_t buffer[25];
@@ -657,6 +663,8 @@ int main(void)
 
 	  if (INT_PACKET_SENT){
 		  INT_PACKET_SENT = 0;
+		  ADF_clear_Tx_flag(); //test
+		  while(ADF_SPI_READY()==0);
 		  if (settings_mode == 'R'){
 			  //while(ADF_SPI_READY()==0);
 			  //ADF_set_Rx_mode();
@@ -668,6 +676,14 @@ int main(void)
 		  cbuf_size = circular_buf_size(audio_buffer_handle_t);
 		  if (cbuf_size > settings_audiosamples_length){
 			  transmitAudioPacket();
+		  }
+	  }
+
+	  if (update_oled){
+		  update_oled=0;
+		  OLED();
+		  if(menu==2){
+			  digipotInit(settings_volume);
 		  }
 	  }
 
@@ -1500,7 +1516,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : LBO_Pin */
   GPIO_InitStruct.Pin = LBO_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(LBO_GPIO_Port, &GPIO_InitStruct);
 
@@ -1540,7 +1556,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		case ADF7242_IRQ2_Pin:
 			INT_PACKET_RECEIVED = 1;
 			packets_received++;
-			//delay_us(10);//6
+			delay_us(10);//6
 			ADF_clear_Rx_flag();
 			break;
 
@@ -1566,6 +1582,13 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 			}
 			break;
 
+		case BTN_RIGHT_Pin:
+			if(RIGHT_state){
+				RIGHT_state = 0;
+				HAL_TIM_Base_Start_IT(&htim11);
+			}
+			break;
+
 		case BTN_DOWN_Pin:
 			if(DOWN_state){
 				DOWN_state = 0;
@@ -1581,7 +1604,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 			break;
 
 		case LBO_Pin:
-			LED_RGB_status(15,0,0);
+			/*
+			if(HAL_GPIO_ReadPin(LBO_GPIO_Port, LBO_Pin)){
+				LBO=1;
+				LED_RGB_status(0,15,0);
+			}
+			else{
+				LBO=0;
+				LED_RGB_status(15,0,0);
+			}*/
+			update_oled = 1;
 			break;
 
 	}
@@ -1590,6 +1622,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
 /* Callback timers */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+
 	// Play audio samples on DAC
 	if (htim->Instance == TIM2){
 		playAudio();
@@ -1597,12 +1630,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 	// Timer for external interrupts (buttons)
 	if (htim->Instance == TIM11){
+
 		// Power button pressed
 		if (HAL_GPIO_ReadPin(BTN_PWR_GPIO_Port, BTN_PWR_Pin)){
-			POWER_state = 1;
+			// POWER_state = 1;
 
 			ADF_sleep();
-
 			OLED_shutdown();
 			HAL_GPIO_WritePin(CLASS_D_SHDN_GPIO_Port, CLASS_D_SHDN_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(MIC_SHDN_GPIO_Port, MIC_SHDN_Pin, GPIO_PIN_RESET);
@@ -1619,11 +1652,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 			HAL_PWR_EnterSTANDBYMode();
 
 			HAL_TIM_Base_Stop_IT(&htim11);
-
 		}
 
 		// Talk button pressed
 		if (HAL_GPIO_ReadPin(BTN_TALK_GPIO_Port, BTN_TALK_Pin)){
+			//TALK_state = 1;
 			// Change mode
 			if (settings_mode == 'R'){
 				settings_mode = 'T';
@@ -1632,79 +1665,131 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 				settings_mode = 'R';
 			}
 
-			TALK_state = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
-
 			// Initialize correct timers, components, interrupts for selected mode
-			//HAL_Delay(1);//added later, not sure if needed
+			// HAL_Delay(1); // added later, not sure if needed
 			setup();
-
 		}
 
 		// Up button pressed
 		if (HAL_GPIO_ReadPin(BTN_UP_GPIO_Port, BTN_UP_Pin)){
-			//Set High Gain Mode
-			if(settings_mode == 'R'){
-				if (HGM){
-					LED_RGB_status(15, 0, 20);
-					HGM =0;
-					HAL_GPIO_WritePin(PA_LNA_HGM_GPIO_Port, PA_LNA_HGM_Pin, GPIO_PIN_SET);
-				}
-				else{
-					LED_RGB_status(0, 0, 10);
-					HGM =1;
-					HAL_GPIO_WritePin(PA_LNA_HGM_GPIO_Port, PA_LNA_HGM_Pin, GPIO_PIN_RESET);
-				}
+			//UP_state = 1;
+			switch(menu){
+				case 0:
+					// Encryption
+					if(settings_encryption){
+						settings_encryption = 0;
+					}
+					else{
+						settings_encryption = 1;
+					}
+					break;
+
+				case 1:
+					if (HGM){
+						LED_RGB_status(0, 0, 10);
+						HGM = 0;
+						HAL_GPIO_WritePin(PA_LNA_HGM_GPIO_Port, PA_LNA_HGM_Pin, GPIO_PIN_SET);
+					}
+					else{
+						LED_RGB_status(15, 0, 20);
+						HGM = 1;
+						HAL_GPIO_WritePin(PA_LNA_HGM_GPIO_Port, PA_LNA_HGM_Pin, GPIO_PIN_RESET);
+					}
+					break;
+
+				case 2:
+					// VOLUME
+					settings_volume = (settings_volume + 5) % 55;
+					break;
+
+				case 3:
+					// Threshold
+					settings_threshold = (settings_threshold + 1) % 9;
+					break;
+
+				case 4:
+					break;
 			}
 
-			//ADD FUNCTIONALITY (function up capped)
-
-			UP_state = 1;
+			update_oled = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
 		}
 
 		// Down button pressed
 		if (HAL_GPIO_ReadPin(BTN_DOWN_GPIO_Port, BTN_DOWN_Pin)){
+			//DOWN_state = 1;
+			switch(menu){
+				case 0:
+					// Encryption
+					if(settings_encryption){
+						settings_encryption = 0;
+					}
+					else{
+						settings_encryption = 1;
+					}
+					break;
 
-			//ADD FUNCTIONALITY (function down capped)
-			if(settings_debugscreen==0){
-				settings_debugscreen=1;
-				OLED_clear_screen();
-				OLED_print_status(settings_mode);
-				OLED_update();
-			}
-			else{
-				settings_debugscreen=0;
-				OLED_clear_screen();
-				OLED_print_status(settings_mode);
-				OLED_update();
+				case 1:
+					if (HGM){
+						LED_RGB_status(0, 0, 10);
+						HGM = 0;
+						HAL_GPIO_WritePin(PA_LNA_HGM_GPIO_Port, PA_LNA_HGM_Pin, GPIO_PIN_SET);
+					}
+					else{
+						LED_RGB_status(15, 0, 20);
+						HGM = 1;
+						HAL_GPIO_WritePin(PA_LNA_HGM_GPIO_Port, PA_LNA_HGM_Pin, GPIO_PIN_RESET);
+					}
+					break;
+
+				case 2:
+					// VOLUME
+					settings_volume = (settings_volume + (55 - 5)) % 55;
+					break;
+
+				case 3:
+					// Threshold
+					settings_threshold = (settings_threshold + (9 - 1)) % 9;
+					break;
+
+				case 4:
+					break;
 			}
 
-			DOWN_state = 1;
+			update_oled = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
 		}
 
 		// Left button pressed
 		if (HAL_GPIO_ReadPin(BTN_LEFT_GPIO_Port, BTN_LEFT_Pin)){
+			//LEFT_state = 1;
 
-			//ADD FUNCTIONALITY (menu left cyclic)
+			menu = (menu + (5 - 1)) % 5;
 
-			LEFT_state = 1;
+			update_oled = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
 		}
 
 		// Right button pressed
 		if (HAL_GPIO_ReadPin(BTN_RIGHT_GPIO_Port, BTN_RIGHT_Pin)){
+			//RIGHT_state = 1;
 
-			//ADD FUNCTIONALITY (menu right cyclic)
+			menu = (menu + 1) % 5;
 
-			RIGHT_state = 1;
+			update_oled = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
 		}
 
-
+		POWER_state = 1;
+		TALK_state = 1;
+		UP_state = 1;
+		DOWN_state = 1;
+		LEFT_state = 1;
+		RIGHT_state = 1;
 	}
 
+	/*
 	// Audio has vibrato :( [comment out TIM9 'T']
 	if(settings_debugscreen){
 		if(htim->Instance == TIM9){
@@ -1728,6 +1813,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 			}
 		}
 	}
+	*/
 
 }
 
@@ -1766,14 +1852,11 @@ void startup(void){
 	OLED_print_credits();
 	OLED_print_status(settings_mode);
 	OLED_update();
+
 	// Setup registers for transceiver
 	ADF_Init(settings_frequency);
 
-
 	HAL_Delay(1000);
-	//OLED_clear_screen();
-	ssh1106_Fill(Black);
-	ssh1106_UpdateScreen();
 
 	ADF_set_turnaround_Tx_Rx();
 
@@ -1784,6 +1867,12 @@ void startup(void){
 
 	// Setup for MCU
 	setup();
+	if(HAL_GPIO_ReadPin(LBO_GPIO_Port, LBO_Pin)){
+		LBO=1;
+	}
+	else{
+		LBO=0;
+	}
 	testvar=0;
 	ADF_set_Rx_mode(); //werkte 21/03
 
@@ -1814,8 +1903,7 @@ void setup(){
 			HAL_TIM_OC_Start(&htim5, TIM_CHANNEL_1);
 			HAL_ADC_Start_IT(&hadc1);
 
-			OLED_print_status(settings_mode);
-			OLED_update();
+			update_oled = 1;
 			//HAL_TIM_Base_Start_IT(&htim9);
 
 			//transmit_voice_key = 1;
@@ -1842,11 +1930,7 @@ void setup(){
 			HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
 			HAL_TIM_Base_Start_IT(&htim2);
 
-			OLED_print_status(settings_mode);
-			//OLED_print_variable("Volume: ", 20, 5, 30);
-			//OLED_print_text("< Thresh.", 1, 54);
-			//OLED_print_text("Encryp. >", 73, 54);
-			OLED_update();
+			update_oled = 1;
 			//ADF_set_Rx_mode(); //werkte 21/03
 			break;
 	}

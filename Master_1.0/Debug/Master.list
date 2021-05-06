@@ -6898,7 +6898,6 @@ void startup(void){
 	HAL_Delay(1000);
  8003254:	f44f 707a 	mov.w	r0, #1000	; 0x3e8
  8003258:	f001 ff50 	bl	80050fc <HAL_Delay>
-	//OLED_clear_screen();
 	ssh1106_Fill(Black);
  800325c:	2000      	movs	r0, #0
  800325e:	f000 ff3d 	bl	80040dc <ssh1106_Fill>
