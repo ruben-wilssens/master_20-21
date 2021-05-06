@@ -123,6 +123,7 @@ void Error_Handler(void);
 #define LED_RGB_RED_GPIO_Port GPIOA
 #define LBO_Pin GPIO_PIN_10
 #define LBO_GPIO_Port GPIOA
+#define LBO_EXTI_IRQn EXTI15_10_IRQn
 #define OLED_SCL_Pin GPIO_PIN_6
 #define OLED_SCL_GPIO_Port GPIOB
 #define OLED_SDA_Pin GPIO_PIN_7
