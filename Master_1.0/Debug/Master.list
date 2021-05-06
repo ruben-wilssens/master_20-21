@@ -27,23 +27,23 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   ALLOC
  11 .ARM.attributes 00000030  00000000  00000000  0002020c  2**0
                   CONTENTS, READONLY
- 12 .debug_info   0002aa49  00000000  00000000  0002023c  2**0
+ 12 .debug_info   0002aa5b  00000000  00000000  0002023c  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 13 .debug_abbrev 000056da  00000000  00000000  0004ac85  2**0
+ 13 .debug_abbrev 000056da  00000000  00000000  0004ac97  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 14 .debug_aranges 00002060  00000000  00000000  00050360  2**3
+ 14 .debug_aranges 00002060  00000000  00000000  00050378  2**3
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 15 .debug_ranges 00001e58  00000000  00000000  000523c0  2**3
+ 15 .debug_ranges 00001e58  00000000  00000000  000523d8  2**3
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 16 .debug_macro  00027de8  00000000  00000000  00054218  2**0
+ 16 .debug_macro  00027de8  00000000  00000000  00054230  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 17 .debug_line   0002c6d5  00000000  00000000  0007c000  2**0
+ 17 .debug_line   0002c6d5  00000000  00000000  0007c018  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 18 .debug_str    000e12ce  00000000  00000000  000a86d5  2**0
+ 18 .debug_str    000e12ce  00000000  00000000  000a86ed  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .comment      00000053  00000000  00000000  001899a3  2**0
+ 19 .comment      00000053  00000000  00000000  001899bb  2**0
                   CONTENTS, READONLY
- 20 .debug_frame  00008df4  00000000  00000000  001899f8  2**2
+ 20 .debug_frame  00008df4  00000000  00000000  00189a10  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
 
 Disassembly of section .text:
@@ -1097,7 +1097,7 @@ void ADF_clear_Tx_flag(void){
 int main(void)
 {
  80009b0:	b580      	push	{r7, lr}
- 80009b2:	b08c      	sub	sp, #48	; 0x30
+ 80009b2:	b092      	sub	sp, #72	; 0x48
  80009b4:	af00      	add	r7, sp, #0
   /* USER CODE END 1 */
 
@@ -1383,21 +1383,21 @@ int main(void)
  8000b56:	6013      	str	r3, [r2, #0]
 							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
-							uint8_t TxBuf[34];
+							uint8_t TxBuf[62];
 							sprintf(TxBuf, "K:%lu;", keyGraycode[0]);
  8000b58:	4b6d      	ldr	r3, [pc, #436]	; (8000d10 <main+0x360>)
  8000b5a:	681a      	ldr	r2, [r3, #0]
- 8000b5c:	1d3b      	adds	r3, r7, #4
+ 8000b5c:	463b      	mov	r3, r7
  8000b5e:	496d      	ldr	r1, [pc, #436]	; (8000d14 <main+0x364>)
  8000b60:	4618      	mov	r0, r3
  8000b62:	f00c ffb5 	bl	800dad0 <siprintf>
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
- 8000b66:	1d3b      	adds	r3, r7, #4
+ 8000b66:	463b      	mov	r3, r7
  8000b68:	4618      	mov	r0, r3
  8000b6a:	f7ff fb31 	bl	80001d0 <strlen>
  8000b6e:	4603      	mov	r3, r0
  8000b70:	b29a      	uxth	r2, r3
- 8000b72:	1d3b      	adds	r3, r7, #4
+ 8000b72:	463b      	mov	r3, r7
  8000b74:	4611      	mov	r1, r2
  8000b76:	4618      	mov	r0, r3
  8000b78:	f00c f8b2 	bl	800cce0 <CDC_Transmit_FS>
@@ -1406,23 +1406,23 @@ int main(void)
  8000b7e:	f002 fa87 	bl	8003090 <HAL_Delay>
 							for(int i=1; i<3; i++){
  8000b82:	2301      	movs	r3, #1
- 8000b84:	62fb      	str	r3, [r7, #44]	; 0x2c
+ 8000b84:	647b      	str	r3, [r7, #68]	; 0x44
  8000b86:	e019      	b.n	8000bbc <main+0x20c>
 						  		sprintf(TxBuf, "%lu;", keyGraycode[i]);
  8000b88:	4a61      	ldr	r2, [pc, #388]	; (8000d10 <main+0x360>)
- 8000b8a:	6afb      	ldr	r3, [r7, #44]	; 0x2c
+ 8000b8a:	6c7b      	ldr	r3, [r7, #68]	; 0x44
  8000b8c:	f852 2023 	ldr.w	r2, [r2, r3, lsl #2]
- 8000b90:	1d3b      	adds	r3, r7, #4
+ 8000b90:	463b      	mov	r3, r7
  8000b92:	4961      	ldr	r1, [pc, #388]	; (8000d18 <main+0x368>)
  8000b94:	4618      	mov	r0, r3
  8000b96:	f00c ff9b 	bl	800dad0 <siprintf>
 						  		CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
- 8000b9a:	1d3b      	adds	r3, r7, #4
+ 8000b9a:	463b      	mov	r3, r7
  8000b9c:	4618      	mov	r0, r3
  8000b9e:	f7ff fb17 	bl	80001d0 <strlen>
  8000ba2:	4603      	mov	r3, r0
  8000ba4:	b29a      	uxth	r2, r3
- 8000ba6:	1d3b      	adds	r3, r7, #4
+ 8000ba6:	463b      	mov	r3, r7
  8000ba8:	4611      	mov	r1, r2
  8000baa:	4618      	mov	r0, r3
  8000bac:	f00c f898 	bl	800cce0 <CDC_Transmit_FS>
@@ -1430,27 +1430,27 @@ int main(void)
  8000bb0:	20c8      	movs	r0, #200	; 0xc8
  8000bb2:	f002 fa6d 	bl	8003090 <HAL_Delay>
 							for(int i=1; i<3; i++){
- 8000bb6:	6afb      	ldr	r3, [r7, #44]	; 0x2c
+ 8000bb6:	6c7b      	ldr	r3, [r7, #68]	; 0x44
  8000bb8:	3301      	adds	r3, #1
- 8000bba:	62fb      	str	r3, [r7, #44]	; 0x2c
- 8000bbc:	6afb      	ldr	r3, [r7, #44]	; 0x2c
+ 8000bba:	647b      	str	r3, [r7, #68]	; 0x44
+ 8000bbc:	6c7b      	ldr	r3, [r7, #68]	; 0x44
  8000bbe:	2b02      	cmp	r3, #2
  8000bc0:	dde2      	ble.n	8000b88 <main+0x1d8>
 						  	}
 							sprintf(TxBuf, "%lu\r\n", keyGraycode[0]);
  8000bc2:	4b53      	ldr	r3, [pc, #332]	; (8000d10 <main+0x360>)
  8000bc4:	681a      	ldr	r2, [r3, #0]
- 8000bc6:	1d3b      	adds	r3, r7, #4
+ 8000bc6:	463b      	mov	r3, r7
  8000bc8:	4954      	ldr	r1, [pc, #336]	; (8000d1c <main+0x36c>)
  8000bca:	4618      	mov	r0, r3
  8000bcc:	f00c ff80 	bl	800dad0 <siprintf>
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
- 8000bd0:	1d3b      	adds	r3, r7, #4
+ 8000bd0:	463b      	mov	r3, r7
  8000bd2:	4618      	mov	r0, r3
  8000bd4:	f7ff fafc 	bl	80001d0 <strlen>
  8000bd8:	4603      	mov	r3, r0
  8000bda:	b29a      	uxth	r2, r3
- 8000bdc:	1d3b      	adds	r3, r7, #4
+ 8000bdc:	463b      	mov	r3, r7
  8000bde:	4611      	mov	r1, r2
  8000be0:	4618      	mov	r0, r3
  8000be2:	f00c f87d 	bl	800cce0 <CDC_Transmit_FS>
@@ -1561,18 +1561,19 @@ int main(void)
  8000c82:	4b21      	ldr	r3, [pc, #132]	; (8000d08 <main+0x358>)
  8000c84:	2200      	movs	r2, #0
  8000c86:	705a      	strb	r2, [r3, #1]
-						/* Check packet type
 							// 0xDF = dummy-packet -> change to audio packet later on in development
 							// 0xEF = e-line
-						*/
+
 					}
+
 					if(Pkt_type == 0xEF){
  8000c88:	4b1c      	ldr	r3, [pc, #112]	; (8000cfc <main+0x34c>)
  8000c8a:	781b      	ldrb	r3, [r3, #0]
  8000c8c:	2bef      	cmp	r3, #239	; 0xef
  8000c8e:	d179      	bne.n	8000d84 <main+0x3d4>
-						//if(RSSI_counter == 0){ //zie ppt dia 22
+							//if(RSSI_counter == 0){ //zie ppt dia 22
 							//e-line replacement happens in readPacket (e-line from TX is directly read in this array)
+
 							generateKeyGraycode();
  8000c90:	f001 f866 	bl	8001d60 <generateKeyGraycode>
 							key_counter++;
@@ -1581,23 +1582,25 @@ int main(void)
  8000c98:	3301      	adds	r3, #1
  8000c9a:	4a1c      	ldr	r2, [pc, #112]	; (8000d0c <main+0x35c>)
  8000c9c:	6013      	str	r3, [r2, #0]
+
 							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
+
 							uint8_t TxBuf[34];
 							sprintf(TxBuf, "K:%lu;", keyGraycode[0]);
  8000c9e:	4b1c      	ldr	r3, [pc, #112]	; (8000d10 <main+0x360>)
  8000ca0:	681a      	ldr	r2, [r3, #0]
- 8000ca2:	1d3b      	adds	r3, r7, #4
+ 8000ca2:	463b      	mov	r3, r7
  8000ca4:	491b      	ldr	r1, [pc, #108]	; (8000d14 <main+0x364>)
  8000ca6:	4618      	mov	r0, r3
  8000ca8:	f00c ff12 	bl	800dad0 <siprintf>
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
- 8000cac:	1d3b      	adds	r3, r7, #4
+ 8000cac:	463b      	mov	r3, r7
  8000cae:	4618      	mov	r0, r3
  8000cb0:	f7ff fa8e 	bl	80001d0 <strlen>
  8000cb4:	4603      	mov	r3, r0
  8000cb6:	b29a      	uxth	r2, r3
- 8000cb8:	1d3b      	adds	r3, r7, #4
+ 8000cb8:	463b      	mov	r3, r7
  8000cba:	4611      	mov	r1, r2
  8000cbc:	4618      	mov	r0, r3
  8000cbe:	f00c f80f 	bl	800cce0 <CDC_Transmit_FS>
@@ -1606,7 +1609,7 @@ int main(void)
  8000cc4:	f002 f9e4 	bl	8003090 <HAL_Delay>
 							for(int i=1; i<3; i++){
  8000cc8:	2301      	movs	r3, #1
- 8000cca:	62bb      	str	r3, [r7, #40]	; 0x28
+ 8000cca:	643b      	str	r3, [r7, #64]	; 0x40
  8000ccc:	e042      	b.n	8000d54 <main+0x3a4>
  8000cce:	bf00      	nop
  8000cd0:	20000c60 	.word	0x20000c60
@@ -1631,19 +1634,19 @@ int main(void)
  8000d1c:	0800debc 	.word	0x0800debc
 						  		sprintf(TxBuf, "%lu;", keyGraycode[i]);
  8000d20:	4a1d      	ldr	r2, [pc, #116]	; (8000d98 <main+0x3e8>)
- 8000d22:	6abb      	ldr	r3, [r7, #40]	; 0x28
+ 8000d22:	6c3b      	ldr	r3, [r7, #64]	; 0x40
  8000d24:	f852 2023 	ldr.w	r2, [r2, r3, lsl #2]
- 8000d28:	1d3b      	adds	r3, r7, #4
+ 8000d28:	463b      	mov	r3, r7
  8000d2a:	491c      	ldr	r1, [pc, #112]	; (8000d9c <main+0x3ec>)
  8000d2c:	4618      	mov	r0, r3
  8000d2e:	f00c fecf 	bl	800dad0 <siprintf>
 						  		CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
- 8000d32:	1d3b      	adds	r3, r7, #4
+ 8000d32:	463b      	mov	r3, r7
  8000d34:	4618      	mov	r0, r3
  8000d36:	f7ff fa4b 	bl	80001d0 <strlen>
  8000d3a:	4603      	mov	r3, r0
  8000d3c:	b29a      	uxth	r2, r3
- 8000d3e:	1d3b      	adds	r3, r7, #4
+ 8000d3e:	463b      	mov	r3, r7
  8000d40:	4611      	mov	r1, r2
  8000d42:	4618      	mov	r0, r3
  8000d44:	f00b ffcc 	bl	800cce0 <CDC_Transmit_FS>
@@ -1651,27 +1654,27 @@ int main(void)
  8000d48:	20c8      	movs	r0, #200	; 0xc8
  8000d4a:	f002 f9a1 	bl	8003090 <HAL_Delay>
 							for(int i=1; i<3; i++){
- 8000d4e:	6abb      	ldr	r3, [r7, #40]	; 0x28
+ 8000d4e:	6c3b      	ldr	r3, [r7, #64]	; 0x40
  8000d50:	3301      	adds	r3, #1
- 8000d52:	62bb      	str	r3, [r7, #40]	; 0x28
- 8000d54:	6abb      	ldr	r3, [r7, #40]	; 0x28
+ 8000d52:	643b      	str	r3, [r7, #64]	; 0x40
+ 8000d54:	6c3b      	ldr	r3, [r7, #64]	; 0x40
  8000d56:	2b02      	cmp	r3, #2
  8000d58:	dde2      	ble.n	8000d20 <main+0x370>
 						  	}
 							sprintf(TxBuf, "%lu\r\n", keyGraycode[0]);
  8000d5a:	4b0f      	ldr	r3, [pc, #60]	; (8000d98 <main+0x3e8>)
  8000d5c:	681a      	ldr	r2, [r3, #0]
- 8000d5e:	1d3b      	adds	r3, r7, #4
+ 8000d5e:	463b      	mov	r3, r7
  8000d60:	490f      	ldr	r1, [pc, #60]	; (8000da0 <main+0x3f0>)
  8000d62:	4618      	mov	r0, r3
  8000d64:	f00c feb4 	bl	800dad0 <siprintf>
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
- 8000d68:	1d3b      	adds	r3, r7, #4
+ 8000d68:	463b      	mov	r3, r7
  8000d6a:	4618      	mov	r0, r3
  8000d6c:	f7ff fa30 	bl	80001d0 <strlen>
  8000d70:	4603      	mov	r3, r0
  8000d72:	b29a      	uxth	r2, r3
- 8000d74:	1d3b      	adds	r3, r7, #4
+ 8000d74:	463b      	mov	r3, r7
  8000d76:	4611      	mov	r1, r2
  8000d78:	4618      	mov	r0, r3
  8000d7a:	f00b ffb1 	bl	800cce0 <CDC_Transmit_FS>
@@ -2741,9 +2744,9 @@ static void MX_TIM2_Init(void)
  8001346:	4b1a      	ldr	r3, [pc, #104]	; (80013b0 <MX_TIM2_Init+0x94>)
  8001348:	2200      	movs	r2, #0
  800134a:	609a      	str	r2, [r3, #8]
-  htim2.Init.Period = 5000-1;
+  htim2.Init.Period = 20000-1;
  800134c:	4b18      	ldr	r3, [pc, #96]	; (80013b0 <MX_TIM2_Init+0x94>)
- 800134e:	f241 3287 	movw	r2, #4999	; 0x1387
+ 800134e:	f644 621f 	movw	r2, #19999	; 0x4e1f
  8001352:	60da      	str	r2, [r3, #12]
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
  8001354:	4b16      	ldr	r3, [pc, #88]	; (80013b0 <MX_TIM2_Init+0x94>)

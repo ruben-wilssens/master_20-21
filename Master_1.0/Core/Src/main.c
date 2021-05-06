@@ -152,7 +152,6 @@ uint8_t d1_line[128];
 
 uint8_t e_line[16]; //indexed by a
 
-
 uint8_t keyGraycode_long[128];
 uint32_t keyGraycode[4];
 uint32_t key_counter = 0;
@@ -301,7 +300,7 @@ int main(void)
 							key_counter++;
 							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
-							uint8_t TxBuf[34];
+							uint8_t TxBuf[62];
 							sprintf(TxBuf, "K:%lu;", keyGraycode[0]);
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
 							HAL_Delay(200);
@@ -348,18 +347,22 @@ int main(void)
 						RSSI_Range[0] = 0XFF; //min
 						RSSI_Range[1] = 0X00; //max
 
-						/* Check packet type
+						/* Check packet type */
 							// 0xDF = dummy-packet -> change to audio packet later on in development
 							// 0xEF = e-line
-						*/
+
 					}
+
 					if(Pkt_type == 0xEF){
-						//if(RSSI_counter == 0){ //zie ppt dia 22
+							//if(RSSI_counter == 0){ //zie ppt dia 22
 							//e-line replacement happens in readPacket (e-line from TX is directly read in this array)
+
 							generateKeyGraycode();
 							key_counter++;
+
 							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
 						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
+
 							uint8_t TxBuf[34];
 							sprintf(TxBuf, "K:%lu;", keyGraycode[0]);
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
@@ -829,7 +832,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 84-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 5000-1;
+  htim2.Init.Period = 20000-1;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
