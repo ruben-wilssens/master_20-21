@@ -663,6 +663,8 @@ int main(void)
 
 	  if (INT_PACKET_SENT){
 		  INT_PACKET_SENT = 0;
+		  ADF_clear_Tx_flag(); //test
+		  while(ADF_SPI_READY()==0);
 		  if (settings_mode == 'R'){
 			  //while(ADF_SPI_READY()==0);
 			  //ADF_set_Rx_mode();
@@ -680,6 +682,9 @@ int main(void)
 	  if (update_oled){
 		  update_oled=0;
 		  OLED();
+		  if(menu==2){
+			  digipotInit(settings_volume);
+		  }
 	  }
 
     /* USER CODE END WHILE */
@@ -1551,7 +1556,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		case ADF7242_IRQ2_Pin:
 			INT_PACKET_RECEIVED = 1;
 			packets_received++;
-			//delay_us(10);//6
+			delay_us(10);//6
 			ADF_clear_Rx_flag();
 			break;
 
@@ -1599,7 +1604,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 			break;
 
 		case LBO_Pin:
-			HAL_Delay(1);
+			/*
 			if(HAL_GPIO_ReadPin(LBO_GPIO_Port, LBO_Pin)){
 				LBO=1;
 				LED_RGB_status(0,15,0);
@@ -1607,7 +1612,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 			else{
 				LBO=0;
 				LED_RGB_status(15,0,0);
-			}
+			}*/
 			update_oled = 1;
 			break;
 
@@ -1695,7 +1700,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 				case 2:
 					// VOLUME
-					settings_volume = (settings_volume + 1) % 51;
+					settings_volume = (settings_volume + 5) % 55;
 					break;
 
 				case 3:
@@ -1740,7 +1745,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 				case 2:
 					// VOLUME
-					settings_volume = (settings_volume + (51 - 1)) % 51;
+					settings_volume = (settings_volume + (55 - 5)) % 55;
 					break;
 
 				case 3:
@@ -1848,13 +1853,6 @@ void startup(void){
 	OLED_print_status(settings_mode);
 	OLED_update();
 
-	if(HAL_GPIO_ReadPin(LBO_GPIO_Port, LBO_Pin)){
-		LBO=1;
-	}
-	else{
-		LBO=0;
-	}
-
 	// Setup registers for transceiver
 	ADF_Init(settings_frequency);
 
@@ -1869,6 +1867,12 @@ void startup(void){
 
 	// Setup for MCU
 	setup();
+	if(HAL_GPIO_ReadPin(LBO_GPIO_Port, LBO_Pin)){
+		LBO=1;
+	}
+	else{
+		LBO=0;
+	}
 	testvar=0;
 	ADF_set_Rx_mode(); //werkte 21/03
 
@@ -1899,7 +1903,7 @@ void setup(){
 			HAL_TIM_OC_Start(&htim5, TIM_CHANNEL_1);
 			HAL_ADC_Start_IT(&hadc1);
 
-			OLED();
+			update_oled = 1;
 			//HAL_TIM_Base_Start_IT(&htim9);
 
 			//transmit_voice_key = 1;
@@ -1926,7 +1930,7 @@ void setup(){
 			HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
 			HAL_TIM_Base_Start_IT(&htim2);
 
-			OLED();
+			update_oled = 1;
 			//ADF_set_Rx_mode(); //werkte 21/03
 			break;
 	}
