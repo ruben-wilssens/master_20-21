@@ -155,7 +155,7 @@ uint32_t voice_key[4] 				= {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C};
 
 /* ---OLED Variabels--- */
 uint8_t LBO = 1;
-uint8_t menu = 0;
+uint8_t menu = 4; //4 = credit screen
 uint8_t update_oled = 0;
 
 /* ---Packet settings--- */
@@ -370,10 +370,12 @@ int main(void)
 
 	  if (INT_PACKET_RECEIVED){
 		  ADF_clear_Rx_flag(); //test
+		  while(ADF_SPI_READY()==0);
 		  INT_PACKET_RECEIVED = 0;
 
 		  if (settings_mode == 'R'){
 			  ADF_set_Rx_mode(); //added
+			  while(ADF_SPI_READY()==0);
 			  packet_valid = readPacket();
 
 			  if(packet_valid){
@@ -504,7 +506,6 @@ int main(void)
 				  }
 
 				  else if(Rx_packet_type == packet_type_audio_encrypted){
-					  //CRYP_SetKey(&hcryp, voice_key);
 					  hcryp.Init.pKey = voice_key;
 					  HAL_CRYP_Decrypt(&hcryp, data, settings_audiosamples_length, samples, 50);
 					  for(uint8_t i = 0; i < settings_audiosamples_length; i++){
@@ -516,6 +517,7 @@ int main(void)
 					  for(uint8_t i = 0; i < settings_audiosamples_length; i++){
 						  circular_buf_put_overwrite(audio_buffer_handle_t, data[i]);
 					  }
+					  encryption_byte = packet_type_reply; // not necessary, should be deleted
 				  }
 
 				  if(encryption_byte !=0){
@@ -1903,7 +1905,7 @@ void setup(){
 			HAL_TIM_OC_Start(&htim5, TIM_CHANNEL_1);
 			HAL_ADC_Start_IT(&hadc1);
 
-			update_oled = 1;
+			//update_oled = 1;
 			//HAL_TIM_Base_Start_IT(&htim9);
 
 			//transmit_voice_key = 1;
@@ -1930,7 +1932,7 @@ void setup(){
 			HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
 			HAL_TIM_Base_Start_IT(&htim2);
 
-			update_oled = 1;
+			//update_oled = 1;
 			//ADF_set_Rx_mode(); //werkte 21/03
 			break;
 	}
