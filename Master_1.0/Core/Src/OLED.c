@@ -93,8 +93,8 @@ void OLED(void){
 			break;
 
 		case 4:
-			ssh1106_SetCursor(3, 10);
-			s = ssh1106_WriteString("Menu 4", Font_6x8, White);
+			//ssh1106_SetCursor(3, 10);
+			//s = ssh1106_WriteString("Menu 4", Font_6x8, White);
 			OLED_print_credits();
 			break;
 	}
@@ -170,8 +170,8 @@ void OLED_print_credits(void){
 void OLED_print_status(char status){
 	ssh1106_SetCursor(3, 0);
 	s = ssh1106_WriteString("12:00", Font_6x8, White); //change with actual time
-	ssh1106_SetCursor(63, 0);
-	s = ssh1106_WriteChar(status, Font_6x8, White);
+	//ssh1106_SetCursor(63, 0);
+	//s = ssh1106_WriteChar(status, Font_6x8, White);
 	if(LBO){
 		ssh1106_SetCursor(92, 0);
 		s = ssh1106_WriteString("BAT_Ok", Font_6x8, White);
