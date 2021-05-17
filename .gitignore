@@ -51,7 +51,15 @@ Module.symvers
 Mkfile.old
 dkms.conf
 Master_1.0/.settings/language.settings.xml
-Master_1.0/.settings/language.settings.xml
-Master_1.0/.settings/language.settings.xml
-Master_1.0/.settings/language.settings.xml
 *.xml
+
+# STM32Cube copied library and project folders
+Drivers/*
+MDK-ARM/*
+EWARM/*
+# CrossWorks project files
+!*/*.hzp
+!*/*.hzs
+
+*.o
+.mxproject
