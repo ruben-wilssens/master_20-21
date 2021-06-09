@@ -62,9 +62,9 @@ uint8_t INT_PACKET_RECEIVED = 0;
 uint8_t INT_PACKET_SENT = 0;
 
 /* Extra variables */
-uint8_t ADF_status; //handig voor debug
+uint8_t ADF_status;
 uint8_t HGM = 0;
-uint16_t packets_received = 0; //handig voor debug
+uint16_t packets_received = 0;
 uint16_t packets_received_prev = 0;
 uint16_t packets_sent = 0;
 uint16_t packets_sent_prev = 0;
@@ -77,7 +77,7 @@ uint8_t RX_BUFFER_BASE;
 
 /* Rx variables */
 uint8_t Pkt_length;
-uint8_t Pkt_type;   //handig voor debug
+uint8_t Pkt_type;
 
 
 /* Button states */
@@ -141,8 +141,8 @@ uint8_t RSSI;
 uint8_t RSSI_counter;
 
 uint8_t RSSI_Measured[128];
-// Constantly checked if newly read RSSI value is not new min or new max
-uint8_t RSSI_Range[2]; // max and min values of 128 measured RSSI values (~ form key)
+
+uint8_t RSSI_Range[2]; // max and min values of 128 measured RSSI values
 
 uint8_t intervals = 8;
 uint8_t quantisation_intervals[7]; // 7 levels to determine 8 intervals between RSSImax en RSSImin
@@ -224,7 +224,8 @@ int main(void)
 
   startup();
 
-  ssh1106_Init();  // Initialise OLED
+  // OLED code
+  ssh1106_Init();
   ssh1106_SetCursor(10,10);
   ssh1106_WriteString ("Algoritme 2", Font_7x10, White);
   ssh1106_SetCursor(10, 30);
@@ -237,19 +238,15 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   	while(1){
-
-  		// Introduce artificial delay between receive from RX and send new dummy packet to RX
-  		// !!!! TX is now transmitting every 5ms mogelijks niet deftig naar RX aan het gaan? !!!!
-
 	  	if (settings_mode == 'T'){
 		  	if(send_e & send_packet){
-		  		// er mag een nieuw pakket gestuurd worden op TX + dit pakket moet e-lijn bevatten
+		  		// new packet (with bitvector e)
 		  		Send_e_line();
 		  		send_e = 0;
 		  		send_packet = 0;
 		  	}
 		  	else if (send_packet){
-		  		// er mag een nieuw pakket gestuurd worden op TX
+		  		// new packet (dummy)
 		  		SendDummyByte(0xDF);
 		  		send_packet = 0;
 		  	}
@@ -259,20 +256,17 @@ int main(void)
 		if(INT_PACKET_RECEIVED){
 		  	INT_PACKET_RECEIVED = 0;
 		  	if(settings_mode == 'T'){
-
 		  		ADF_set_Rx_mode();
 		  		RSSI = ReadPacket(); // Extract Pkt_length, Pkt_type, Data and RSSI from received package
 
-		  		/* Check packet type (soort beveiliging voor "random" pakketten)
-		  		 	 0xDF = dummy-packet -> change to audio packet later on in development
+		  		/* Check packet type
+		  		 	 0xDF = dummy-packet
 		  		 	 0xEF = e-line
 		  		*/
 
-		  		if(Pkt_type == 0xDF){ //normaal krijgt hij enkel DF (dummy als TX)
-
+		  		if(Pkt_type == 0xDF){
 					// Update RSSI_Measured
 					RSSI_Measured[RSSI_counter] = RSSI;
-
 					RSSI_counter++;
 
 					// Update min and max RSSI on the fly */
@@ -283,52 +277,47 @@ int main(void)
 						RSSI_Range[1] = RSSI;
 					}
 
-
-					if(RSSI_counter == 128){ //als RSSI_counter = 128 ==> RSSI_Measured[127] werd ingevuld en daarna werd de counter verhoogd
+					if(RSSI_counter == 128){
 						RSSI_counter = 0;
-						makeGraycode(); // make e- and d-lines
+						// make e- and d-lines
+						makeGraycode();
 
-						//reset RSSI_range //--> ["infinity", 0]
-						//opmerking: wss zijn min en max ook omgekeerd omdat het tweecomplement is (255 ==> -127 dBm denk ik), maar vooral entropy is belangrijk dus maakt niet uit
-
+						// reset range
 						RSSI_Range[0] = 0XFF; //min
 						RSSI_Range[1] = 0X00; //max
 
 						if(settings_mode == 'T'){
 							send_e = 1;
+
 							generateKeyGraycode();
 							key_counter++;
-							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
-						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
-							uint8_t TxBuf[62];
-							sprintf(TxBuf, "K:%lu;", keyGraycode[0]);
-							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-							HAL_Delay(200);
-							for(int i=1; i<3; i++){
-						  		sprintf(TxBuf, "%lu;", keyGraycode[i]);
-						  		CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-						  		HAL_Delay(200);
-						  	}
-							sprintf(TxBuf, "%lu\r\n", keyGraycode[0]);
-							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-							HAL_Delay(200);
 
+							// Transmit 32-bit key over USB
+							uint8_t TxBuf[62];
+							sprintf(TxBuf, "K;%lu;%lu;", key_counter, keyGraycode[0]);
+							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+							HAL_Delay(1);
+							for(int i=1; i<3; i++){
+								sprintf(TxBuf, "%lu;", keyGraycode[i]);
+								CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+								HAL_Delay(1);
+							}
+							sprintf(TxBuf, "%lu\r\n", keyGraycode[3]);
+							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
 						}
 					}
 		  		}
 		  	}
 
 		  	else if (settings_mode == 'R'){
-
-				ADF_set_Rx_mode(); // gebeurt normaal automatisch nadat een pakket gestuurd is door de ADF_set_turnaround_Tx_Rx !!!! Nakijken
-				RSSI = ReadPacket(); // Extract Pkt_length, Pkt_type, data and RSSI from received package
+				ADF_set_Rx_mode();
+				RSSI = ReadPacket();
 				HAL_Delay(1);
 
 		  		if(Pkt_type == 0xDF || Pkt_type == 0xEF){
-		  			SendDummyByte(0xDF); // Enkel antwoorden na filter
+		  			SendDummyByte(0xDF);
 		  			// Update RSSI_Measured
 					RSSI_Measured[RSSI_counter] = RSSI;
-
 					RSSI_counter++;
 
 					// Update min and max RSSI on the fly */
@@ -339,43 +328,32 @@ int main(void)
 						RSSI_Range[1] = RSSI;
 					}
 
-					if(RSSI_counter == 128){ //als RSSI_counter = 128 ==> RSSI_Measured[127] werd ingevuld en daarna werd de counter verhoogd
+					if(RSSI_counter == 128 && Pkt_type == 0xDF){
 						RSSI_counter = 0;
-						makeGraycode(); // make e- and d-lines
+						// make e- and d-lines
+						makeGraycode();
 
-						//reset RSSI_range //--> ["infinity", 0]
+						//reset range
 						RSSI_Range[0] = 0XFF; //min
 						RSSI_Range[1] = 0X00; //max
-
-						/* Check packet type */
-							// 0xDF = dummy-packet -> change to audio packet later on in development
-							// 0xEF = e-line
-
 					}
 
-					if(Pkt_type == 0xEF){
-							//if(RSSI_counter == 0){ //zie ppt dia 22
-							//e-line replacement happens in readPacket (e-line from TX is directly read in this array)
-
+					else if(Pkt_type == 0xEF){
+						// @TODO: fix desyn of intervals
 							generateKeyGraycode();
 							key_counter++;
 
-							// Transmit 32-bit key over USB (zal je 4 keer moeten doen om volledige 128-bit sleutel te printen [heb dit zelf nog niet gedaan])
-						  	//opmerking: mss kunnen we ook de key_counter mee sturen, maar je moet goed opletten dat je buffer groot genoeg is, maar ook niet té groot omdat anders USB buffer vol komt
-
 							uint8_t TxBuf[34];
-							sprintf(TxBuf, "K:%lu;", keyGraycode[0]);
+							sprintf(TxBuf, "K;%lu;%lu;", key_counter, keyGraycode[0]);
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-							HAL_Delay(200);
+							HAL_Delay(1);
 							for(int i=1; i<3; i++){
 						  		sprintf(TxBuf, "%lu;", keyGraycode[i]);
 						  		CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-						  		HAL_Delay(200);
+						  		HAL_Delay(1);
 						  	}
-							sprintf(TxBuf, "%lu\r\n", keyGraycode[0]);
+							sprintf(TxBuf, "%lu\r\n", keyGraycode[3]);
 							CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-							HAL_Delay(200);
-						//}
 					}
 		  		}
 
@@ -1272,10 +1250,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 /* Callback timers */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	if (htim->Instance == TIM2){
-		// verander TIM2 zodat frequentie = +-166 Hz (elke 6 ms pakket)
-		// moet aangepast kunnen worden naar +-333 Hz (elke 3 ms), +-93 Hz (elke 12 ms), +-41 ms (elke 24 ms)
-		// als we snel pakketten sturen, werkt het algoritme wss minder goed en genereert deze sleutels met ZEER slechte entropie
-		// hoe trager we gaan sturen, zou het hopelijk een hogere entropy moeten hebben
+		// change TIM2 to frequency = +-166 Hz (every 6 ms packet)
+		// test cases: +-333 Hz (elke 3 ms), +-93 Hz (elke 12 ms), +-41 ms (elke 24 ms)
 		send_packet = 1;
 	}
 
@@ -1461,35 +1437,16 @@ void setup(){
 		case 'T':
 			LED_RGB_status(0, 10, 0);
 
-			// Stop the DAC interface and timer2 (8 kHz)
-			//HAL_DAC_Stop(&hdac, DAC_CHANNEL_1);
-
 			/* Start transmit timer */
 			HAL_TIM_Base_Start_IT(&htim2);
-
-
-			// Start timer5 (16 kHz) and ADC interrupt triggered by TIM5
-			//HAL_TIM_OC_Start(&htim5, TIM_CHANNEL_1);
-			//HAL_ADC_Start_IT(&hadc1);
-
-			//HAL_TIM_Base_Start_IT(&htim9);
 
 			break;
 
 		case 'R':
 			LED_RGB_status(0, 0, 10);
 
-			// Stop timer5 (16 kHz) and ADC interrupt triggered by TIM5
-			HAL_TIM_OC_Stop(&htim5, TIM_CHANNEL_1);
-			//HAL_ADC_Stop_IT(&hadc1);
-
 			/* Start transmit timer */
 			HAL_TIM_Base_Stop_IT(&htim2);
-
-			// Start the DAC interface and timer2 (8 kHz)
-			//HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
-			//HAL_TIM_Base_Start_IT(&htim2);
-
 			ADF_set_Rx_mode();
 			break;
 	}
@@ -1585,8 +1542,6 @@ uint8_t ReadPacket(void){
 	HAL_GPIO_WritePin(ADF7242_CS_GPIO_Port, ADF7242_CS_Pin, GPIO_PIN_SET);
 	while (ADF_SPI_READY() == 0);
 
-
-	//opmerking: misschien een veiligheid inbouwen mocht je terug vaak random pakketten krijgen?
 	return RSSI; //RSSI vaak tussen 150 en 250
 }
 
