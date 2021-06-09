@@ -1,3 +1,11 @@
+/*
+ *  main.c
+ *
+ *  Created on: February 2021
+ *  Author: Ruben Wilssens & Victor Van der Elst
+ *
+ */
+
 /* USER CODE BEGIN Header */
 
 /* USER CODE END Header */
@@ -30,7 +38,7 @@ typedef struct{
 	uint32_t key_32bit;				// current 32-bit key
 	uint16_t key_counter_32bit;		// number of generated 32-bit keys
 
-	uint8_t keywords_128bit;		// current number of new 32-bit keys in 128-bit key (also serves as index)
+	uint8_t keywords_128bit;		// index for new 32-bit keys in 128-bit key
 	uint32_t key_128bit[4];			// current 128-bit key
 	uint32_t key_CRC_128bit[4];		// new 128-bit key with new 32-bit
 	uint16_t key_counter;			// number of generated 128-bit keys
@@ -130,33 +138,34 @@ UART_HandleTypeDef huart5;
 /* USER CODE BEGIN PV */
 
 /* ---Default settings--- */
-char settings_mode = 'R';								// mode can be R (RX) or T (TX)
 
-#define settings_audiosamples_length 48					// samplecount per audio packet -> packetrate = 8000^-1 * settings_audiosamples_length
-uint8_t settings_volume = 30;
-uint8_t HGM = 0;										// 0 = LGM LNA, 1 = HGM LNA
-uint8_t settings_encryption = 1;						// 0 = off, 1 = on
-uint8_t settings_threshold = 3;							// threshold for choosing keybits
-double ALPHA = 0.1;										// weighting factor exponential moving average
-const uint8_t settings_keybit_delay = 4;				// packets between new possible keybit
+char settings_mode = 'R';						// mode can be R (RX) or T (TX)
+#define settings_audiosamples_length 48			// samplecount per audio packet -> packetrate = 8000^-1 * settings_audiosamples_length
+uint8_t settings_volume = 30;					// digipot volume (keep < 50)
+uint8_t HGM = 0;								// 0 = LGM LNA, 1 = HGM LNA
+uint8_t settings_encryption = 1;				// 0 = off, 1 = on
+uint8_t settings_threshold = 3;					// threshold for choosing keybits
+double ALPHA = 0.1;								// weighting factor exponential moving average
+const uint8_t settings_keybit_delay = 4;		// packets between new possible keybit
 
-uint8_t settings_debugscreen = 0; //debug
-uint8_t settings_keysUSB = 1; //not used
 
-uint8_t encryption_byte = 0;
 
-uint8_t dest_ID = 0xFF;
-const uint8_t source_ID = 0x01;
-const uint8_t broadcast_ID = 0xFF;
+uint8_t encryption_byte = 0;					// new packet type
+
+uint8_t dest_ID = 0xFF;							// current destination address
+const uint8_t source_ID = 0x01;					// identification address device
+const uint8_t broadcast_ID = 0xFF;				// broadcast address
 
 uint8_t transmit_voice_key = 0;
-const uint32_t voice_key_device[4] 	= {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C};
-uint32_t voice_key[4] 				= {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C};
+const uint32_t voice_key_device[4] 	= {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C}; // voice key of device (extra: generate new one with RNG)
+uint32_t voice_key[4] 				= {0x2B7E1516,0x28AED2A6,0xABF71588,0x09CF4F3C}; // current active voice key
 
 /* ---OLED Variabels--- */
-uint8_t LBO = 1;
-uint8_t menu = 4; //4 = credit screen
-uint8_t update_oled = 0;
+uint8_t settings_debugscreen = 0; 						// debug flag (unused)
+uint8_t LBO = 1;										// low battery indicator flag
+uint8_t menu = 4; 										// menu flag: 4 = credit screen
+uint8_t update_oled = 0;								// OLED update flag
+uint8_t settings_USB_print = 0;							// 0 = print new 32-bit key, 1 = print received RSS,
 
 /* ---Packet settings--- */
 const uint8_t packet_type_audio = 0xFE;
@@ -188,9 +197,8 @@ uint8_t Rx_RSSI;
 uint8_t packet_valid;
 
 /* ---External interrupts--- */
-uint8_t INT_PACKET_RECEIVED = 0;
-uint8_t INT_PACKET_SENT = 0;
-
+uint8_t INT_PACKET_RECEIVED = 0;				// ADF7242 interrupt
+uint8_t INT_PACKET_SENT = 0;					// ADF7242 interrupt
 uint16_t packets_received = 0;
 uint16_t packets_received_prev = 0;
 uint16_t packets_sent = 0;
@@ -204,7 +212,8 @@ static volatile int UP_state = 1;
 static volatile int DOWN_state = 1;
 static volatile int LEFT_state = 1;
 static volatile int RIGHT_state = 1;
-uint8_t testvar = 0;
+
+uint8_t setup_switch = 0;						// hacking code (Tx->Rx bug)
 
 
 /* ---Audio--- */
@@ -217,12 +226,12 @@ uint8_t data[settings_audiosamples_length];
 uint8_t samples[settings_audiosamples_length];
 
 /* ---Transceiver variables--- */
-const uint32_t settings_frequency = 245000;				// ADF frequency in [Hz/10kHz] -> 2,45 GHz
+const uint32_t settings_frequency = 245000;		// ADF7242 frequency in [Hz/10kHz] -> 2,45 GHz
 // Buffer starting address
 uint8_t RX_BUFFER_BASE;
 uint8_t TX_BUFFER_BASE;
 
-uint8_t ADF_status;										// SPI status word return ADF7242
+uint8_t ADF_status;								// SPI status word return ADF7242
 
 
 /* USER CODE END PV */
@@ -248,29 +257,29 @@ static void MX_CRYP_Init(void);
 static void MX_CRC_Init(void);
 /* USER CODE BEGIN PFP */
 
-void HAL_GPIO_EXTI_Callback(uint16_t);
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *);
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef*);
+void HAL_GPIO_EXTI_Callback(uint16_t);					// external interrupt callback
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *);// timer elapsed callback
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef*);		// ADC conversion complete callback
 
-void startup(void);
-void setup(void);
+void startup(void);										// startup init device
+void setup(void);										// setup device, display & transceiver
 
-void digipotInit(uint8_t);
-void LED_RGB_status(uint16_t , uint16_t , uint16_t );
+void digipotInit(uint8_t);								// set digipot volume
+void LED_RGB_status(uint16_t , uint16_t , uint16_t );	// set RGB led color
 
-void playAudio(void);
+void playAudio(void);									// transfer samples from audio buffer to DAC
 
-void transmitVoiceKey(device *ptrdev);
-void transmitAudioPacket(void);
-uint8_t readPacket(void);
+void transmitVoiceKey(device *ptrdev);					// transmit voice key when becoming TX
+void transmitAudioPacket(void);							// transmit audio packet if buffer filled with 48 packets
+uint8_t readPacket(void);								// read received packet
 
-void writeKeybitPacket(device*, uint8_t);
+void writeKeybitPacket(device*, uint8_t);				// write packet for network key generation
 
-uint8_t Hamming_create(uint8_t);
-uint8_t Hamming_correct(uint8_t, uint8_t);
+uint8_t Hamming_create(uint8_t);						// create parity bits of Hamming-code from 8-bit key
+uint8_t Hamming_correct(uint8_t, uint8_t);				// correct 8-bit key with parity bits
 
-void CRC_create(device*);
-uint8_t CRC_check(device*);
+void CRC_create(device*);								// create CRC checksum of new 128-bit network key with inserted 32-bit key
+uint8_t CRC_check(device*);								// create CRC checksums
 
 /* USER CODE END PFP */
 
@@ -338,14 +347,9 @@ int main(void)
   startup();
   digipotInit(settings_volume);
 
-  // OLED interrupt TIM9 (1s)
-  // HAL_TIM_Base_Start_IT(&htim9);
-
   // USB VCP variables
-  int8_t buffer[25];
-  int16_t RSSI_buf_16[16];
+  int8_t buffer[60]; //25
 
-  //ptrdev = &dev1;
   ptrdev= &devices[0];
 
   /* USER CODE END 2 */
@@ -362,10 +366,10 @@ int main(void)
 		  transmit_voice_key = 0;
 	  }
 
-	  if(testvar==1){
+	  if(setup_switch==1){
 		  HAL_Delay(20);
 		  ADF_set_Rx_mode();
-		  testvar=0;
+		  setup_switch=0;
 	  }
 
 	  if (INT_PACKET_RECEIVED){
@@ -397,6 +401,13 @@ int main(void)
 					  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
 				  }
 				  (ptrdev->RSSI_counter)++;
+
+
+				  if(settings_USB_print == 1){
+					  // Transmit RSS & RSS_Mean over USB
+					  sprintf(buffer, "R,%d,%d\r\n", (int8_t) Rx_RSSI, (int8_t) ptrdev->RSSI_Mean);
+					  CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
+				  }
 
 
 				  if(Rx_packet_type == packet_type_keybit_chosen){
@@ -464,12 +475,12 @@ int main(void)
 					  ptrdev->keybits_8bit = 0;
 					  (ptrdev->keybytes_32bit) = 0;
 
-
-					  // Transmit over USB
-					  uint8_t TxBuf[34];
-					  sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
-					  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-
+					  if(settings_USB_print == 0){
+						  // Transmit key over USB
+						  uint8_t TxBuf[60];
+						  sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
+						  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+					  }
 
 					  if(keyword_index != ptrdev->keywords_128bit){
 						  // There is a missmatch in key index (because CRC_reply did not arrive)
@@ -493,12 +504,6 @@ int main(void)
 						  (ptrdev->key_counter)++;
 
 						  encryption_byte = packet_type_keybit_CRC_ok;
-						  /*
-						  // Transmit 32-bit key over USB
-						  uint8_t TxBuf[34];
-						  sprintf(TxBuf, "R;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
-						  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
-						  */
 					  }
 					  else{
 						  encryption_byte = packet_type_keybit_CRC_bad;
@@ -553,6 +558,13 @@ int main(void)
 					  ptrdev->RSSI_Mean = round(ptrdev->RSSI_Mean_Double);
 				  }
 				  (ptrdev->RSSI_counter)++;
+
+
+				  if(settings_USB_print == 1){
+					  // Transmit RSS & RSS_Mean over USB
+					  sprintf(buffer, "T,%d,%d\r\n", (int8_t) Rx_RSSI, (int8_t) ptrdev->RSSI_Mean);
+					  CDC_Transmit_FS((int8_t *)buffer, strlen(buffer));
+				  }
 
 
 				  // ---Key generation algorithm TX---
@@ -617,10 +629,12 @@ int main(void)
 						  (ptrdev->key_counter_32bit)++;
 						  (ptrdev->keybytes_32bit) = 0;
 
-						  // Transmit 32-bit key over USB
-						  uint8_t TxBuf[34];
-						  sprintf(TxBuf, "T;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
-						  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+						  if(settings_USB_print == 0){
+							  // Transmit key over USB
+							  uint8_t TxBuf[60];
+							  sprintf(TxBuf, "T;%lu\r\n", (unsigned long) (ptrdev->key_32bit));
+							  CDC_Transmit_FS((int8_t *)TxBuf, strlen(TxBuf));
+						  }
 
 						  encryption_byte = packet_type_keybit_chosen_CRC;
 					  }
@@ -1712,6 +1726,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 				case 4:
 					break;
+
+				case 5:
+					// USB print
+					if(settings_USB_print){
+						settings_USB_print = 0;
+					}
+					else{
+						settings_USB_print = 1;
+					}
+					break;
 			}
 
 			update_oled = 1;
@@ -1757,6 +1781,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 				case 4:
 					break;
+				case 5:
+					// USB print
+					if(settings_USB_print){
+						settings_USB_print = 0;
+					}
+					else{
+						settings_USB_print = 1;
+					}
+					break;
 			}
 
 			update_oled = 1;
@@ -1767,7 +1800,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		if (HAL_GPIO_ReadPin(BTN_LEFT_GPIO_Port, BTN_LEFT_Pin)){
 			//LEFT_state = 1;
 
-			menu = (menu + (5 - 1)) % 5;
+			menu = (menu + (6 - 1)) % 6;
 
 			update_oled = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
@@ -1777,7 +1810,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		if (HAL_GPIO_ReadPin(BTN_RIGHT_GPIO_Port, BTN_RIGHT_Pin)){
 			//RIGHT_state = 1;
 
-			menu = (menu + 1) % 5;
+			menu = (menu + 1) % 6;
 
 			update_oled = 1;
 			HAL_TIM_Base_Stop_IT(&htim11);
@@ -1792,7 +1825,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	}
 
 	/*
-	// Audio has vibrato :( [comment out TIM9 'T']
 	if(settings_debugscreen){
 		if(htim->Instance == TIM9){
 			if(settings_mode == 'R'){
@@ -1875,7 +1907,7 @@ void startup(void){
 	else{
 		LBO=0;
 	}
-	testvar=0;
+	setup_switch=0;
 	ADF_set_Rx_mode(); //werkte 21/03
 
 }
@@ -1913,7 +1945,7 @@ void setup(){
 			break;
 
 		case 'R':
-			//testvar = 1;
+			//setup_switch = 1;
 			LED_RGB_status(0, 0, 10);
 
 			ADF_clear_Rx_flag(); //test

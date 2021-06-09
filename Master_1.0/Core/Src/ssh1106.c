@@ -1,8 +1,9 @@
-/**
+/*
  * This Library was originally written by Olivier Van den Eede (4ilo) in 2016.
  * Some refactoring was done and SPI support was added by Aleksander Alekseev (afiskon) in 2018.
  * https://github.com/afiskon/stm32-ssh1106
- * Adapted by Victor Van der Elst in 2021
+ * Adapted by Victor Van der Elst & Ruben Wilssens in 2021
+ *
  */
 
 #include <math.h>
@@ -24,15 +25,13 @@ void ssh1106_WriteData(uint8_t* buffer, size_t buff_size) {
     HAL_I2C_Mem_Write(&SSH1106_I2C_PORT, SSH1106_I2C_ADDR, 0x40, 1, buffer, buff_size, HAL_MAX_DELAY);
 }
 
-
-
 // Screenbuffer
 static uint8_t SSH1106_Buffer[SSH1106_BUFFER_SIZE];
 
 // Screen object
 static SSH1106_t SSH1106;
 
-/* Fills the Screenbuffer with values from a given buffer of a fixed length */
+// Fills the Screenbuffer with values from a given buffer of a fixed length
 SSH1106_Error_t ssh1106_FillBuffer(uint8_t* buf, uint32_t len) {
     SSH1106_Error_t ret = SSH1106_ERR;
     if (len <= SSH1106_BUFFER_SIZE) {
@@ -206,8 +205,7 @@ char ssh1106_WriteChar(char ch, FontDef Font, SSH1106_COLOR color) {
 
     // Check remaining space on current line
     if (SSH1106_WIDTH < (SSH1106.CurrentX + Font.FontWidth) ||
-        SSH1106_HEIGHT < (SSH1106.CurrentY + Font.FontHeight))
-    {
+        SSH1106_HEIGHT < (SSH1106.CurrentY + Font.FontHeight)){
         // Not enough space on current line
         return 0;
     }
@@ -218,7 +216,7 @@ char ssh1106_WriteChar(char ch, FontDef Font, SSH1106_COLOR color) {
         for(j = 0; j < Font.FontWidth; j++) {
             if((b << j) & 0x8000)  {
                 ssh1106_DrawPixel(SSH1106.CurrentX + j, (SSH1106.CurrentY + i), (SSH1106_COLOR) color);
-            } else {
+            }else{
                 ssh1106_DrawPixel(SSH1106.CurrentX + j, (SSH1106.CurrentY + i), (SSH1106_COLOR)!color);
             }
         }
@@ -264,27 +262,20 @@ void ssh1106_Line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, SSH1106_COLOR 
   int32_t error2;
 
   ssh1106_DrawPixel(x2, y2, color);
-    while((x1 != x2) || (y1 != y2))
-    {
+  while((x1 != x2) || (y1 != y2)){
     ssh1106_DrawPixel(x1, y1, color);
     error2 = error * 2;
-    if(error2 > -deltaY)
-    {
+    if(error2 > -deltaY){
       error -= deltaY;
       x1 += signX;
-    }
-    else
-    {
+    }else{
     /*nothing to do*/
     }
 
-    if(error2 < deltaX)
-    {
+    if(error2 < deltaX){
       error += deltaX;
       y1 += signY;
-    }
-    else
-    {
+    }else{
     /*nothing to do*/
     }
   }
@@ -297,9 +288,7 @@ void ssh1106_Polyline(const SSH1106_VERTEX *par_vertex, uint16_t par_size, SSH11
     for(i = 1; i < par_size; i++){
       ssh1106_Line(par_vertex[i - 1].x, par_vertex[i - 1].y, par_vertex[i].x, par_vertex[i].y, color);
     }
-  }
-  else
-  {
+  }else{
     /*nothing to do*/
   }
   return;
@@ -308,21 +297,20 @@ void ssh1106_Polyline(const SSH1106_VERTEX *par_vertex, uint16_t par_size, SSH11
 static float ssh1106_DegToRad(float par_deg) {
     return par_deg * 3.14 / 180.0;
 }
+
 /*Normalize degree to [0;360]*/
 static uint16_t ssh1106_NormalizeTo0_360(uint16_t par_deg) {
   uint16_t loc_angle;
-  if(par_deg <= 360)
-  {
+  if(par_deg <= 360){
     loc_angle = par_deg;
-  }
-  else
-  {
+  }else{
     loc_angle = par_deg % 360;
     loc_angle = ((par_deg != 0)?par_deg:360);
   }
   return loc_angle;
 }
-/*DrawArc. Draw angle is beginning from 4 quart of trigonometric circle (3pi/2)
+
+/* DrawArc. Draw angle is beginning from 4 quart of trigonometric circle (3pi/2)
  * start_angle in degree
  * sweep in degree
  */
@@ -341,18 +329,14 @@ void ssh1106_DrawArc(uint8_t x, uint8_t y, uint8_t radius, uint16_t start_angle,
     count = (ssh1106_NormalizeTo0_360(start_angle) * CIRCLE_APPROXIMATION_SEGMENTS) / 360;
     approx_segments = (loc_sweep * CIRCLE_APPROXIMATION_SEGMENTS) / 360;
     approx_degree = loc_sweep / (float)approx_segments;
-    while(count < approx_segments)
-    {
+    while(count < approx_segments){
         rad = ssh1106_DegToRad(count*approx_degree);
         xp1 = x + (int8_t)(sin(rad)*radius);
         yp1 = y + (int8_t)(cos(rad)*radius);
         count++;
-        if(count != approx_segments)
-        {
+        if(count != approx_segments){
             rad = ssh1106_DegToRad(count*approx_degree);
-        }
-        else
-        {
+        }else{
             rad = ssh1106_DegToRad(loc_sweep);
         }
         xp2 = x + (int8_t)(sin(rad)*radius);
@@ -385,21 +369,16 @@ void ssh1106_DrawCircle(uint8_t par_x,uint8_t par_y,uint8_t par_r,SSH1106_COLOR 
             if(-x == y && e2 <= x) {
               e2 = 0;
             }
-            else
-            {
+            else{
               /*nothing to do*/
             }
-        }
-        else
-        {
+        }else{
           /*nothing to do*/
         }
-        if(e2 > x) {
+        if(e2 > x){
           x++;
           err = err + (x * 2 + 1);
-        }
-        else
-        {
+        }else{
           /*nothing to do*/
         }
     } while(x <= 0);
@@ -425,10 +404,10 @@ void ssh1106_SetContrast(const uint8_t value) {
 
 void ssh1106_SetDisplayOn(const uint8_t on) {
     uint8_t value;
-    if (on) {
+    if (on){
         value = 0xAF;   // Display on
         SSH1106.DisplayOn = 1;
-    } else {
+    }else{
         value = 0xAE;   // Display off
         SSH1106.DisplayOn = 0;
     }

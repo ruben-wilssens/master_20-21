@@ -1,8 +1,9 @@
-/**
+/*
  * This Library was originally written by Olivier Van den Eede (4ilo) in 2016.
  * Some refactoring was done and SPI support was added by Aleksander Alekseev (afiskon) in 2018.
  * https://github.com/afiskon/stm32-ssh1106
- * Adapted by Victor Van der Elst in 2021
+ * Adapted by Victor Van der Elst & Ruben Wilssens in 2021
+ *
  */
 
 #ifndef INC_SSH1106_H_

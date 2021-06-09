@@ -1,8 +1,8 @@
 /*
- * OLED.h
- *
+ *  OLED.c
  *  Created on: April 2021
  *  Author: Ruben Wilssens & Victor Van der Elst
+ *
  */
 
 #ifndef INC_OLED_H_
@@ -17,10 +17,10 @@ extern C {
  *
  * Default pinout
  *
-OLED	  |STM32F4    |DESCRIPTION
-
-SDA       |PB7        |I2C Serial Data
-SCL       |PB6        |I2C Serial Clock
+ * OLED	  |STM32F4    |DESCRIPTION
+ * SDA    |PB7        |I2C Serial Data
+ * SCL    |PB6        |I2C Serial Clock
+ *
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -33,6 +33,8 @@ SCL       |PB6        |I2C Serial Clock
 /* Defines -------------------------------------------------------------------*/
 
 /* Functions -----------------------------------------------------------------*/
+void OLED_print_credits(void);
+void OLED_print_status(char);
 void OLED(void);
 void OLED_init(void);
 void OLED_clear_screen(void);
@@ -41,16 +43,8 @@ void OLED_shutdown(void);
 
 void OLED_print_text(char [], uint8_t, uint8_t);
 void OLED_print_variable(char [], uint32_t, uint8_t, uint8_t);
-void OLED_print_credits(void);
-void OLED_print_status(char);
 void OLED_print_hexadecimal(char[], uint32_t, uint8_t, uint8_t);
 void OLED_print_binary(char[], uint8_t, uint8_t, uint8_t);
-
-
-//void OLED_print_date_and_time(void);
-//void OLED_print_talk(void);
-//void OLED_print_stoptalk(void);
-//void OLED_print_volume(uint8_t);
 
 #ifdef __cplusplus
 }
